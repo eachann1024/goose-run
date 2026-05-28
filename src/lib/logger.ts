@@ -5,7 +5,7 @@ interface LogEntry {
   data?: unknown;
 }
 
-const LOG_KEY = "goose-2fa-logs";
+const LOG_KEY = "goose-run:logs";
 const MAX_AGE = 30 * 60 * 1000; // 30 分钟
 const MAX_ENTRIES = 200;
 
