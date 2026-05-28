@@ -2,6 +2,17 @@ import { create } from "zustand";
 import type { LogLine, RunState } from "../lib/types";
 import { getPlatform } from "./useScripts";
 
+// appendLog 节流：mutable push + rAF 批量刷新
+let _dirty = false;
+function scheduleFlush() {
+  if (_dirty) return;
+  _dirty = true;
+  requestAnimationFrame(() => {
+    _dirty = false;
+    useRuns.setState((s) => ({ runs: { ...s.runs } }));
+  });
+}
+
 interface RunsState {
   runs: Record<string, RunState>;
   taskIdByScript: Record<string, string>;
@@ -49,16 +60,13 @@ export const useRuns = create<RunsState>((set, get) => ({
   },
 
   appendLog(taskId, line) {
-    set((state) => {
-      const run = state.runs[taskId];
-      if (!run) return state;
-      return {
-        runs: {
-          ...state.runs,
-          [taskId]: { ...run, lines: [...run.lines, line] },
-        },
-      };
-    });
+    const run = get().runs[taskId];
+    if (!run) return;
+    run.lines.push(line);
+    if (run.lines.length > 10000) {
+      run.lines = run.lines.slice(-8000);
+    }
+    scheduleFlush();
   },
 
   finishRun(taskId, exitCode, signal) {
