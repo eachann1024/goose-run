@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+import type { ScriptData } from "../types";
+import { filterScripts, matchScript } from "../search";
+
+function makeScript(partial: Partial<ScriptData>): ScriptData {
+  return {
+    id: partial.id ?? crypto.randomUUID(),
+    name: partial.name ?? "",
+    script: partial.script ?? "echo hello",
+    createdAt: partial.createdAt ?? Date.now(),
+    updatedAt: partial.updatedAt ?? Date.now(),
+    description: partial.description,
+    tags: partial.tags,
+    cwd: partial.cwd,
+    env: partial.env,
+    shell: partial.shell,
+    confirmBeforeRun: partial.confirmBeforeRun,
+    lastRun: partial.lastRun,
+  };
+}
+
+describe("matchScript", () => {
+  const deploy = makeScript({
+    name: "Deploy Prod",
+    description: "部署生产环境",
+    script: "pnpm build && rsync ...",
+    tags: ["deploy", "prod"],
+  });
+  const test = makeScript({
+    name: "Run Tests",
+    description: "跑单元测试",
+    script: "vitest run",
+    tags: ["test"],
+  });
+
+  it("空查询匹配全部", () => {
+    expect(matchScript(deploy, "")).toBe(true);
+    expect(matchScript(test, "   ")).toBe(true);
+  });
+
+  it("大小写不敏感", () => {
+    expect(matchScript(deploy, "deploy")).toBe(true);
+    expect(matchScript(deploy, "DEPLOY")).toBe(true);
+    expect(matchScript(deploy, "Deploy")).toBe(true);
+  });
+
+  it("匹配 name", () => {
+    expect(matchScript(deploy, "prod")).toBe(true);
+    expect(matchScript(test, "prod")).toBe(false);
+  });
+
+  it("匹配 description", () => {
+    expect(matchScript(deploy, "生产")).toBe(true);
+    expect(matchScript(test, "单元")).toBe(true);
+  });
+
+  it("匹配 script 内容", () => {
+    expect(matchScript(deploy, "rsync")).toBe(true);
+    expect(matchScript(test, "vitest")).toBe(true);
+  });
+
+  it("匹配 tags", () => {
+    expect(matchScript(deploy, "prod")).toBe(true);
+    expect(matchScript(test, "test")).toBe(true);
+  });
+
+  it("多关键字 AND", () => {
+    expect(matchScript(deploy, "deploy prod")).toBe(true);
+    expect(matchScript(deploy, "deploy vitest")).toBe(false);
+  });
+
+  it("不存在的字段返回 false", () => {
+    expect(matchScript(deploy, "nope")).toBe(false);
+  });
+
+  it("undefined description/tags 不爆炸", () => {
+    const bare = makeScript({ name: "bare", script: "ls" });
+    expect(matchScript(bare, "bare")).toBe(true);
+    expect(matchScript(bare, "missing")).toBe(false);
+  });
+});
+
+describe("filterScripts", () => {
+  const list = [
+    makeScript({ name: "Deploy Prod", tags: ["deploy"] }),
+    makeScript({ name: "Run Tests", tags: ["test"] }),
+    makeScript({ name: "Deploy Staging", tags: ["deploy"] }),
+  ];
+
+  it("空查询返回全部", () => {
+    expect(filterScripts(list, "")).toHaveLength(3);
+  });
+
+  it("子串匹配", () => {
+    const result = filterScripts(list, "deploy");
+    expect(result).toHaveLength(2);
+    expect(result.map((s) => s.name)).toEqual(["Deploy Prod", "Deploy Staging"]);
+  });
+});
