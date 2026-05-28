@@ -11,8 +11,6 @@ dist-utools/
 .claude/
 .serena/
 .agents/
-CLAUDE.md
-AGENTS.md
 plans/
 docs/
 ai-docs/
