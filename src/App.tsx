@@ -181,7 +181,12 @@ export default function App() {
       const filteredResult = filterScripts(state.scripts, state.searchQuery);
       const target = filteredResult.scripts[idx];
       if (target) {
-        if (target.confirmBeforeRun && !confirm(`确认运行「${target.name}」？此脚本标记为危险操作。`)) return;
+        if (target.confirmBeforeRun) {
+          // 危险脚本打开详情面板，由面板内联确认
+          setSelectedId(target.id);
+          setShowDetail(true);
+          return;
+        }
         startRun(target.id, { script: target.script, cwd: target.cwd, env: target.env, shell: target.shell });
       }
       return;
