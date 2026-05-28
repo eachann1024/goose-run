@@ -14,13 +14,7 @@ export default mergeConfig(baseConfig, {
       },
     },
     rolldownOptions: {
-      external: [
-        "@tauri-apps/api/core",
-        "@tauri-apps/api/window",
-        "@tauri-apps/plugin-clipboard-manager",
-        "@tauri-apps/plugin-dialog",
-        "@tauri-apps/plugin-notification",
-      ],
+      external: [],
     },
     chunkSizeWarningLimit: 1000,
     reportCompressedSize: false,

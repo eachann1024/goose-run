@@ -7,17 +7,12 @@
   "scripts": {
     "dev": "vite --port 6003",
     "build": "tsc -b && vite build -c vite.config.utools.ts --logLevel warn && node utools/scripts/build.js",
-    "app": "tauri dev",
-    "app:build": "tauri build --bundles dmg",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
-    "@tauri-apps/plugin-dialog": "^2.7.1",
-    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tanstack/react-virtual": "^3.13.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.3.0",
@@ -34,7 +29,6 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",
-    "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.9.1",
