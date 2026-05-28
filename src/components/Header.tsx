@@ -1,6 +1,8 @@
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { Plus, Moon, Sun, Settings } from "lucide-react";
 import { useScripts } from "@/stores/useScripts";
+import { useRuns } from "@/stores/useRuns";
+import { SettingsPanel } from "@/components/SettingsPanel";
 
 export const Header = forwardRef<HTMLInputElement>(function Header(_, ref) {
   const searchQuery = useScripts((s) => s.searchQuery);
@@ -8,13 +10,24 @@ export const Header = forwardRef<HTMLInputElement>(function Header(_, ref) {
   const setEditingId = useScripts((s) => s.setEditingId);
   const isDark = useScripts((s) => s.isDark);
   const toggleDark = useScripts((s) => s.toggleDark);
+  const runningCount = useRuns((s) => Object.values(s.runs).filter(r => r.status === "running").length);
+  const [showSettings, setShowSettings] = useState(false);
 
   return (
+    <>
     <header className="flex h-12 w-full shrink-0 items-center gap-3 px-4 border-b border-border bg-bg/95 backdrop-blur sticky top-0 z-10">
       {/* 左：Logo + 标题 */}
-      <h1 className="font-serif text-lg font-semibold text-fg whitespace-nowrap">
-        鹅的运行
-      </h1>
+      <div className="flex items-center gap-2 whitespace-nowrap">
+        <h1 className="font-serif text-lg font-semibold text-fg">
+          鹅的运行
+        </h1>
+        {runningCount > 0 && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-info/10 text-blue-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            {runningCount}
+          </span>
+        )}
+      </div>
 
       {/* 中：搜索框 */}
       <div className="flex-1 flex justify-center">
@@ -51,7 +64,7 @@ export const Header = forwardRef<HTMLInputElement>(function Header(_, ref) {
         </button>
 
         <button
-          onClick={() => console.log("settings")}
+          onClick={() => setShowSettings(true)}
           className="rounded-lg p-2 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
           aria-label="设置"
         >
@@ -59,5 +72,7 @@ export const Header = forwardRef<HTMLInputElement>(function Header(_, ref) {
         </button>
       </div>
     </header>
+    <SettingsPanel open={showSettings} onOpenChange={setShowSettings} />
+    </>
   );
 });

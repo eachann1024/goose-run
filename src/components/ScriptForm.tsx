@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useScripts } from "@/stores/useScripts";
 import type { ShellKind } from "@/lib/types";
+import { extractParams } from "@/lib/params";
 import {
   Drawer,
   DrawerContent,
@@ -49,6 +50,7 @@ export function ScriptForm() {
 
   const [form, setForm] = useState<FormState>(defaultForm);
   const [errors, setErrors] = useState<{ name?: string; script?: string }>({});
+  const params = extractParams(form.script);
 
   const isNew = editingId === "new";
   const isOpen = editingId !== null;
@@ -213,6 +215,21 @@ export function ScriptForm() {
             />
             {errors.script && (
               <p className="text-[11px] text-destructive">{errors.script}</p>
+            )}
+            {params.length > 0 && (
+              <div className="rounded-md bg-surface border border-border p-3 space-y-1.5">
+                <p className="text-[11px] font-medium text-fg-muted">
+                  检测到 {params.length} 个参数（运行时填入）
+                </p>
+                {params.map((p) => (
+                  <div key={p.name} className="flex items-center gap-2 text-xs">
+                    <code className="text-accent">{"{{" + p.name + "}}"}</code>
+                    {p.options && (
+                      <span className="text-fg-faint">可选：{p.options.join(" / ")}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
