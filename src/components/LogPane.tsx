@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRuns } from "@/stores/useRuns";
 import type { LogLine, RunState } from "@/lib/types";
 
@@ -95,13 +96,6 @@ export function LogPane({ scriptId }: LogPaneProps) {
     return () => clearInterval(id);
   }, [run?.status, run?.startedAt]);
 
-  // 自动滚到底
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !isNearBottomRef.current) return;
-    el.scrollTop = el.scrollHeight;
-  }, [run?.lines.length]);
-
   function handleScroll() {
     const el = containerRef.current;
     if (!el) return;
@@ -120,6 +114,20 @@ export function LogPane({ scriptId }: LogPaneProps) {
   }
 
   const lines = run?.lines ?? [];
+
+  const rowVirtualizer = useVirtualizer({
+    count: lines.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 20,
+    overscan: 30,
+  });
+
+  // 自动滚到底（虚拟滚动版）
+  useEffect(() => {
+    if (!isNearBottomRef.current || lines.length === 0) return;
+    rowVirtualizer.scrollToIndex(lines.length - 1, { align: "end" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines.length]);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -157,11 +165,26 @@ export function LogPane({ scriptId }: LogPaneProps) {
             <span className="text-slate-500 italic text-[12px]">(暂无日志，点上方按钮运行)</span>
           </div>
         ) : (
-          lines.map((line, i) => (
-            <div key={i} className={classify(line)}>
-              {line.text}
-            </div>
-          ))
+          <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
+            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+              const line = lines[virtualItem.index]!;
+              return (
+                <div
+                  key={virtualItem.index}
+                  className={classify(line)}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  {line.text}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

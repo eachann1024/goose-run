@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useScripts } from "@/stores/useScripts";
 import { useRuns } from "@/stores/useRuns";
 import { usePlatform } from "@/platform/context";
+import { filterScripts } from "@/lib/search";
 import { Header } from "@/components/Header";
 import { ScriptList } from "@/components/ScriptList";
 import { ScriptDetail } from "@/components/ScriptDetail";
@@ -33,6 +34,7 @@ export default function App() {
 
   const appendLog  = useRuns((s) => s.appendLog);
   const finishRun  = useRuns((s) => s.finishRun);
+  const startRun   = useRuns((s) => s.startRun);
   const runs       = useRuns((s) => s.runs);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +99,10 @@ export default function App() {
           exitCode: d.code,
           durationMs: d.endedAt - run.startedAt,
         });
+        // 运行完成通知
+        const scriptName = useScripts.getState().scripts.find((s) => s.id === run.scriptId)?.name ?? "脚本";
+        const ok = d.code === 0;
+        platform.showNotification(ok ? `✓ ${scriptName} 运行成功` : `✗ ${scriptName} 运行失败 (exit ${d.code})`);
       }
     };
     const onError = (e: Event) => {
@@ -167,6 +173,20 @@ export default function App() {
       return;
     }
 
+    // Cmd+1~9：运行过滤后列表中对应位置的脚本
+    if (e.metaKey && e.key >= "1" && e.key <= "9") {
+      e.preventDefault();
+      const idx = parseInt(e.key) - 1;
+      const state = useScripts.getState();
+      const filteredResult = filterScripts(state.scripts, state.searchQuery);
+      const target = filteredResult.scripts[idx];
+      if (target) {
+        if (target.confirmBeforeRun && !confirm(`确认运行「${target.name}」？此脚本标记为危险操作。`)) return;
+        startRun(target.id, { script: target.script, cwd: target.cwd, env: target.env, shell: target.shell });
+      }
+      return;
+    }
+
     if (inField) return;
 
     if (e.key === "/" || (e.key === "f" && (e.metaKey || e.ctrlKey))) {
@@ -175,7 +195,7 @@ export default function App() {
     } else if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey) {
       setEditingId("new");
     }
-  }, [platform, setEditingId, setShowDetail, setSearchQuery]);
+  }, [platform, startRun, setEditingId, setShowDetail, setSearchQuery]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKey);
