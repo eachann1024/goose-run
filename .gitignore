@@ -1,0 +1,42 @@
+node_modules
+dist
+*.local
+.DS_Store
+*.tsbuildinfo
+
+# 平台构建输出
+dist-utools/
+dist-tauri/
+src-tauri/target/
+
+# AI / 内部文档
+.claude/
+.serena/
+.agents/
+CLAUDE.md
+AGENTS.md
+plans/
+docs/
+ai-docs/
+.ai/
+
+# 产品文档 / 任务
+PRODUCT.md
+CHANGELOG.md
+tasks/
+task/
+test-results/
+pnpm-lock.yaml
+log/
+logs/
+
+# 隐私 / 密钥
+.env*
+*.secret
+*.key
+*.pem
+credentials*
+secrets/
+
+# Playwright MCP
+.playwright-mcp/
