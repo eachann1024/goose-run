@@ -1,0 +1,28 @@
+{
+  "pluginName": "鹅的运行",
+  "description": "本地脚本一键运行 · 实时日志流",
+  "author": "eachann",
+  "homepage": "",
+  "version": "0.1.0",
+  "logo": "logo.png",
+  "pluginSetting": {
+    "single": true,
+    "height": 660
+  },
+  "features": [
+    {
+      "code": "run",
+      "explain": "打开鹅的运行面板",
+      "cmds": ["鹅的运行", "goose run", "gr"]
+    },
+    {
+      "code": "quick",
+      "explain": "搜索并直接运行某个脚本",
+      "cmds": [
+        { "type": "regex", "label": "鹅的运行：快速运行", "match": "/^(gr|鹅运)\\s+\\S+/i" }
+      ]
+    }
+  ],
+  "main": "dist/index.html",
+  "preload": "preload/preload.cjs"
+}
