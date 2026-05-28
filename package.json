@@ -6,12 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 6003",
-    "build": "tsc -b && vite build -c vite.config.utools.ts --logLevel warn && node utools/scripts/build.js",
+    "build": "node_modules/.bin/tsc -b && node node_modules/vite/bin/vite.js build -c vite.config.utools.ts --logLevel warn && node utools/scripts/build.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@fontsource-variable/geist": "^5.2.9",
     "@tanstack/react-virtual": "^3.13.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
