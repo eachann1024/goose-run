@@ -34,6 +34,7 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
     if (isRunning) {
       stopRun(run!.taskId);
     } else {
+      if (script.confirmBeforeRun && !confirm(`确认运行「${script.name}」？此脚本标记为危险操作。`)) return;
       startRun(script.id, {
         script: script.script,
         cwd: script.cwd,

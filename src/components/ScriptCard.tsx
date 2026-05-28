@@ -122,7 +122,11 @@ export function ScriptCard({
         </button>
       ) : (
         <button
-          onClick={(e) => { e.stopPropagation(); onRun(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (script.confirmBeforeRun && !confirm(`确认运行「${script.name}」？此脚本标记为危险操作。`)) return;
+            onRun();
+          }}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-accent text-accent-fg transition-colors hover:bg-accent-hover active:scale-95"
           aria-label="运行脚本"
         >
