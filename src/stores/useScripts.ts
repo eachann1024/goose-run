@@ -12,6 +12,8 @@ export function getPlatform(): PlatformAdapter {
   return platform;
 }
 
+export type SortMode = "lastRun" | "name" | "created";
+
 interface ScriptsState {
   scripts: ScriptData[];
   searchQuery: string;
@@ -20,6 +22,7 @@ interface ScriptsState {
   showDetail: boolean;
   isDark: boolean;
   isThemeLocked: boolean;
+  sortMode: SortMode;
 
   // data actions
   load(): Promise<void>;
@@ -33,6 +36,7 @@ interface ScriptsState {
   setSelectedId(id: string | null): void;
   setEditingId(id: string | null): void;
   setShowDetail(b: boolean): void;
+  setSortMode(mode: SortMode): void;
 
   // theme actions
   toggleDark(): void;
@@ -42,6 +46,35 @@ interface ScriptsState {
 
 const DARK_KEY = "goose-run-dark";
 const LOCK_KEY = "goose-run-dark-locked";
+const SORT_KEY = "goose-run:sort-mode";
+
+/**
+ * 排序工具函数，可在组件中直接 import 使用。
+ */
+export function sortScripts(scripts: ScriptData[], mode: SortMode): ScriptData[] {
+  const arr = [...scripts];
+  if (mode === "name") {
+    return arr.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  }
+  if (mode === "created") {
+    return arr.sort((a, b) => b.createdAt - a.createdAt);
+  }
+  // lastRun: 有 lastRun 的按 startedAt 降序，无 lastRun 的按 updatedAt 降序排在后面
+  return arr.sort((a, b) => {
+    const aTime = a.lastRun?.startedAt ?? null;
+    const bTime = b.lastRun?.startedAt ?? null;
+    if (aTime !== null && bTime !== null) return bTime - aTime;
+    if (aTime !== null) return -1;
+    if (bTime !== null) return 1;
+    return b.updatedAt - a.updatedAt;
+  });
+}
+
+function loadSortMode(): SortMode {
+  const saved = localStorage.getItem(SORT_KEY);
+  if (saved === "lastRun" || saved === "name" || saved === "created") return saved;
+  return "lastRun";
+}
 
 function loadDarkPrefs(): { isDark: boolean; isThemeLocked: boolean } {
   const locked = localStorage.getItem(LOCK_KEY) === "1";
@@ -58,6 +91,7 @@ function applyDark(isDark: boolean): void {
 
 const { isDark: initDark, isThemeLocked: initLocked } = loadDarkPrefs();
 applyDark(initDark);
+const initSortMode = loadSortMode();
 
 export const useScripts = create<ScriptsState>((set, get) => ({
   scripts: [],
@@ -67,6 +101,7 @@ export const useScripts = create<ScriptsState>((set, get) => ({
   showDetail: false,
   isDark: initDark,
   isThemeLocked: initLocked,
+  sortMode: initSortMode,
 
   async load() {
     const scripts = await platform.loadScripts();
@@ -123,6 +158,11 @@ export const useScripts = create<ScriptsState>((set, get) => ({
 
   setShowDetail(b) {
     set({ showDetail: b });
+  },
+
+  setSortMode(mode) {
+    set({ sortMode: mode });
+    localStorage.setItem(SORT_KEY, mode);
   },
 
   toggleDark() {

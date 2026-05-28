@@ -88,12 +88,15 @@ describe("filterScripts", () => {
   ];
 
   it("空查询返回全部", () => {
-    expect(filterScripts(list, "")).toHaveLength(3);
+    const { scripts, total } = filterScripts(list, "");
+    expect(scripts).toHaveLength(3);
+    expect(total).toBe(3);
   });
 
   it("子串匹配", () => {
-    const result = filterScripts(list, "deploy");
-    expect(result).toHaveLength(2);
-    expect(result.map((s) => s.name)).toEqual(["Deploy Prod", "Deploy Staging"]);
+    const { scripts, total } = filterScripts(list, "deploy");
+    expect(scripts).toHaveLength(2);
+    expect(total).toBe(3);
+    expect(scripts.map((s) => s.name)).toEqual(["Deploy Prod", "Deploy Staging"]);
   });
 });
