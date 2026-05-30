@@ -1,6 +1,13 @@
 import { create } from "zustand";
-import type { LogLine, RunState } from "../lib/types";
+import type { LogLine, RunState, ScriptData } from "../lib/types";
+import { extractPort } from "../lib/port-detect";
+import { extractParams, applyParams } from "../lib/params";
 import { getPlatform } from "./useScripts";
+import { useSettings } from "./useSettings";
+
+// 日志行单调 id：作为虚拟列表稳定 key（slice 截断后下标平移，不能用 index）
+let _logId = 0;
+const nextLogId = () => ++_logId;
 
 // appendLog 节流：mutable push + rAF 批量刷新
 let _dirty = false;
@@ -16,6 +23,20 @@ function scheduleFlush() {
 interface RunsState {
   runs: Record<string, RunState>;
   taskIdByScript: Record<string, string>;
+  /** 探测命令结果：scriptId → 系统里是否真实在运行（含本插件外启动的进程） */
+  probedRunning: Record<string, boolean>;
+  /** 待填参数的脚本：非空时弹出参数面板，填完才真正运行 */
+  pendingRun: ScriptData | null;
+
+  /**
+   * 统一运行入口（收口）：危险确认 → 已在跑则跳过 → 有 {{参数}} 则弹面板 → 否则直接跑。
+   * ScriptList / ScriptDetail / Cmd+1~9 / 快速运行 / 键盘回车都走这里，参数与登录 shell 一致生效。
+   */
+  requestRun(script: ScriptData): void;
+  /** 参数面板确认：用填入值替换 {{}} 后运行 */
+  confirmRun(values: Record<string, string>): void;
+  /** 取消参数面板 */
+  cancelRun(): void;
 
   startRun(
     scriptId: string,
@@ -24,18 +45,66 @@ interface RunsState {
       cwd?: string;
       env?: Record<string, string>;
       shell?: "bash" | "zsh" | "sh";
+      login?: boolean;
     },
   ): Promise<string | null>;
-  appendLog(taskId: string, line: LogLine): void;
+  appendLog(taskId: string, line: Omit<LogLine, "id">): void;
   finishRun(taskId: string, exitCode: number | null, signal: string | null): void;
+  /** 手动回填检测到的端口（AI 兜底识别后调用） */
+  setDetectedPort(taskId: string, port: number): void;
   stopRun(taskId: string): Promise<void>;
   clearRun(taskId: string): void;
   getRunByScript(scriptId: string): RunState | null;
+  /** 执行脚本的探测命令并更新 probedRunning。无命令或平台不支持时按未运行处理 */
+  probeScript(scriptId: string, command?: string): Promise<void>;
+  /** 该脚本是否在运行：本插件启动的 run 在跑，或探测命令判定在运行 */
+  isScriptRunning(scriptId: string): boolean;
+}
+
+// 用填好的参数值替换 {{}} 后启动；登录 shell 跟随全局设置
+function launchScript(script: ScriptData, values: Record<string, string>): void {
+  const finalScript = applyParams(script.script, values);
+  const login = useSettings.getState().loginShell !== false;
+  void useRuns.getState().startRun(script.id, {
+    script: finalScript,
+    cwd: script.cwd,
+    env: script.env,
+    shell: script.shell,
+    login,
+  });
 }
 
 export const useRuns = create<RunsState>((set, get) => ({
   runs: {},
   taskIdByScript: {},
+  probedRunning: {},
+  pendingRun: null,
+
+  requestRun(script) {
+    // 危险脚本二次确认（刺眼打断，集中在此处，所有入口统一生效）
+    if (script.confirmBeforeRun && !confirm(`确认运行「${script.name}」？此脚本标记为危险操作。`)) {
+      return;
+    }
+    // single 再入去重：本插件已有该脚本在跑，不再并发起第二个
+    const existing = get().taskIdByScript[script.id];
+    if (existing && get().runs[existing]?.status === "running") return;
+    // 含 {{参数}} → 弹面板填值；否则直接跑
+    if (extractParams(script.script).length > 0) {
+      set({ pendingRun: script });
+      return;
+    }
+    launchScript(script, {});
+  },
+
+  confirmRun(values) {
+    const script = get().pendingRun;
+    set({ pendingRun: null });
+    if (script) launchScript(script, values);
+  },
+
+  cancelRun() {
+    set({ pendingRun: null });
+  },
 
   async startRun(scriptId, opts) {
     const taskId = crypto.randomUUID();
@@ -62,20 +131,36 @@ export const useRuns = create<RunsState>((set, get) => ({
   appendLog(taskId, line) {
     const run = get().runs[taskId];
     if (!run) return;
-    run.lines.push(line);
+    run.lines.push({ ...line, id: nextLogId() });
     if (run.lines.length > 10000) {
       run.lines = run.lines.slice(-8000);
     }
+    // 正则优先：首次从日志里识别到端口就记下，后续不再覆盖
+    if (run.detectedPort == null && line.stream !== "system") {
+      const p = extractPort(line.text);
+      if (p != null) run.detectedPort = p;
+    }
     scheduleFlush();
+  },
+
+  setDetectedPort(taskId, port) {
+    set((state) => {
+      const run = state.runs[taskId];
+      if (!run || run.detectedPort === port) return state;
+      return { runs: { ...state.runs, [taskId]: { ...run, detectedPort: port } } };
+    });
   },
 
   finishRun(taskId, exitCode, signal) {
     set((state) => {
       const run = state.runs[taskId];
       if (!run) return state;
+      // 幂等：已终止的 run 忽略后到事件（spawn error 与 exit 可能双触发，避免状态被覆写）
+      if (run.status !== "running") return state;
 
       let status: RunState["status"];
-      if (signal === "SIGTERM") {
+      // 主动中止：SIGTERM 或兜底 SIGKILL 都算「已中止」，不能误判为失败
+      if (signal === "SIGTERM" || signal === "SIGKILL") {
         status = "stopped";
       } else if (exitCode === 0) {
         status = "success";
@@ -119,5 +204,28 @@ export const useRuns = create<RunsState>((set, get) => ({
       .filter((r) => r.scriptId === scriptId && r.endedAt != null)
       .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
     return finished[0] ?? null;
+  },
+
+  async probeScript(scriptId, command) {
+    const platform = getPlatform();
+    let running = false;
+    if (command && command.trim() && platform.probeRunning) {
+      try {
+        running = await platform.probeRunning(command);
+      } catch {
+        running = false;
+      }
+    }
+    set((state) => {
+      if (state.probedRunning[scriptId] === running) return state;
+      return { probedRunning: { ...state.probedRunning, [scriptId]: running } };
+    });
+  },
+
+  isScriptRunning(scriptId) {
+    const state = get();
+    const activeTaskId = state.taskIdByScript[scriptId];
+    if (activeTaskId && state.runs[activeTaskId]?.status === "running") return true;
+    return state.probedRunning[scriptId] === true;
   },
 }));

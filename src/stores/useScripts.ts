@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { PlatformAdapter } from "../platform/types";
 import type { ScriptData, NewScriptInput } from "../lib/types";
+import { filterScripts } from "../lib/search";
 
 let platform: PlatformAdapter;
 
@@ -18,6 +19,8 @@ interface ScriptsState {
   scripts: ScriptData[];
   searchQuery: string;
   selectedId: string | null;
+  /** 键盘上下键导航的游标（与 selectedId/打开详情解耦） */
+  cursorId: string | null;
   editingId: string | null;
   showDetail: boolean;
   isDark: boolean;
@@ -34,6 +37,7 @@ interface ScriptsState {
   // ui actions
   setSearchQuery(q: string): void;
   setSelectedId(id: string | null): void;
+  setCursorId(id: string | null): void;
   setEditingId(id: string | null): void;
   setShowDetail(b: boolean): void;
   setSortMode(mode: SortMode): void;
@@ -70,6 +74,16 @@ export function sortScripts(scripts: ScriptData[], mode: SortMode): ScriptData[]
   });
 }
 
+/**
+ * 屏幕上「可见且有序」的脚本列表 —— 列表渲染、Cmd+1~9、上下键导航共用同一来源，
+ * 避免快捷键取到的顺序与肉眼看到的不一致。
+ */
+export function getVisibleScripts(
+  state: Pick<ScriptsState, "scripts" | "searchQuery" | "sortMode">,
+): ScriptData[] {
+  return sortScripts(filterScripts(state.scripts, state.searchQuery).scripts, state.sortMode);
+}
+
 function loadSortMode(): SortMode {
   const saved = localStorage.getItem(SORT_KEY);
   if (saved === "lastRun" || saved === "name" || saved === "created") return saved;
@@ -97,6 +111,7 @@ export const useScripts = create<ScriptsState>((set, get) => ({
   scripts: [],
   searchQuery: "",
   selectedId: null,
+  cursorId: null,
   editingId: null,
   showDetail: false,
   isDark: initDark,
@@ -150,6 +165,10 @@ export const useScripts = create<ScriptsState>((set, get) => ({
 
   setSelectedId(id) {
     set({ selectedId: id });
+  },
+
+  setCursorId(id) {
+    set({ cursorId: id });
   },
 
   setEditingId(id) {

@@ -66,7 +66,7 @@ export function highlightMatch(
     .filter((p) => p.length > 0)
     .map((p) => ({
       text: p,
-      highlight: pattern.test(p.toLowerCase()) || tokens.some((t) => p.toLowerCase() === t),
+      highlight: tokens.some((t) => p.toLowerCase() === t),
     }));
 }
 

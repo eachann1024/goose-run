@@ -81,6 +81,11 @@ export function createWebAdapter(): PlatformAdapter {
 
     listTasks() { return Array.from(fakeTasks.keys()); },
 
+    // web 降级：无法探测真实进程，正在「假运行」的任务视为运行中，其余未运行
+    async probeRunning(): Promise<boolean> {
+      return false;
+    },
+
     async copyText(text: string) {
       try { await navigator.clipboard.writeText(text); } catch {}
     },
@@ -120,6 +125,18 @@ export function createWebAdapter(): PlatformAdapter {
       } else {
         console.log("[goose-run] " + text);
       }
+    },
+
+    // web 降级：浏览器无法可靠选目录/读任意路径文件，返回 null（dev 调试用拖拽兜底）
+    pickDirectory(): null {
+      return null;
+    },
+    readFileText(): null {
+      return null;
+    },
+
+    openExternal(url: string) {
+      window.open(url, "_blank", "noopener,noreferrer");
     },
   };
 }
