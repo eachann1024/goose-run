@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export function SettingsAI() {
+export function SettingsAI({ portalContainer }: { portalContainer?: HTMLElement | null }) {
   const enabled = useAI((s) => s.enabled);
   const setEnabled = useAI((s) => s.setEnabled);
   const baseURL = useAI((s) => s.baseURL);
@@ -99,7 +99,7 @@ export function SettingsAI() {
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder={modelOptions.length === 0 ? "点右侧获取模型列表" : "选择模型"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent container={portalContainer}>
                   {modelOptions.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.label}

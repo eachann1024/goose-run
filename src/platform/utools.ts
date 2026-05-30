@@ -12,6 +12,7 @@ declare global {
       stopTask(taskId: string): boolean;
       listTasks(): string[];
       probeRunning?(command: string): boolean | Promise<boolean>;
+      killPort?(port: number): boolean | Promise<boolean>;
       copyText(text: string): void;
       saveToFile?(content: string, defaultName: string): boolean;
       readFromFile?(): string | null;
@@ -50,6 +51,7 @@ export function createUToolsAdapter(): PlatformAdapter {
     stopTask(taskId) { return api.stopTask(taskId); },
     listTasks() { return api.listTasks?.() ?? []; },
     async probeRunning(command) { return (await api.probeRunning?.(command)) ?? false; },
+    async killPort(port) { return (await api.killPort?.(port)) ?? false; },
 
     copyText(text) { api.copyText(text); },
     saveToFile(content, defaultName) { return api.saveToFile?.(content, defaultName) ?? false; },

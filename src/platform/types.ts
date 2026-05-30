@@ -30,6 +30,12 @@ export interface PlatformAdapter {
    * 用于检测脚本在系统里的真实运行状态（含本插件外启动的进程）。
    */
   probeRunning?(command: string): Promise<boolean>;
+  /**
+   * 结束占用指定端口（LISTEN）的进程。
+   * 用于「停止/重启」本插件外部启动的服务——外部进程没有任务句柄，只能按端口定位。
+   * 成功（含端口本就空闲）返回 true。
+   */
+  killPort?(port: number): Promise<boolean>;
 
   copyText(text: string): void | Promise<void>;
   saveToFile(content: string, defaultName: string): boolean | Promise<boolean>;

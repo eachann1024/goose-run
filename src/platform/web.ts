@@ -86,6 +86,11 @@ export function createWebAdapter(): PlatformAdapter {
       return false;
     },
 
+    // web 降级：浏览器无法 kill 真实进程，恒返回 false（dev 仅看视觉）
+    async killPort(): Promise<boolean> {
+      return false;
+    },
+
     async copyText(text: string) {
       try { await navigator.clipboard.writeText(text); } catch {}
     },
