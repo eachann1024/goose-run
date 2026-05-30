@@ -5,14 +5,6 @@ import type { ShellKind } from "@/lib/types";
 import { extractParams } from "@/lib/params";
 import { lsofProbe, isAutoLsof } from "@/lib/port-detect";
 import { X, FolderOpen } from "lucide-react";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerBody,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,7 +54,6 @@ export function ScriptForm() {
   const params = extractParams(form.script);
 
   const isNew = editingId === "new";
-  const isOpen = editingId !== null;
   const title = isNew ? "新增脚本" : "编辑脚本";
 
   // 编辑模式：加载已有数据
@@ -174,29 +165,20 @@ export function ScriptForm() {
   }
 
   return (
-    <Drawer
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) handleClose();
-      }}
-    >
-      <DrawerContent>
-        <DrawerHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <DrawerTitle className="font-serif text-lg">{title}</DrawerTitle>
-            <DrawerClose asChild>
-              <button
-                type="button"
-                className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="关闭"
-              >
-                <X size={16} strokeWidth={1.75} />
-              </button>
-            </DrawerClose>
-          </div>
-        </DrawerHeader>
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
+        <h2 className="font-serif text-lg text-fg">{title}</h2>
+        <button
+          type="button"
+          onClick={handleClose}
+          className="rounded p-1 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
+          aria-label="关闭"
+        >
+          <X size={16} strokeWidth={1.75} />
+        </button>
+      </div>
 
-        <DrawerBody className="space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
           {/* 名称 */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
@@ -358,8 +340,7 @@ export function ScriptForm() {
               取消
             </Button>
           </div>
-        </DrawerBody>
-      </DrawerContent>
-    </Drawer>
+      </div>
+    </div>
   );
 }

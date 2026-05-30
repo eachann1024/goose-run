@@ -6,28 +6,17 @@ import { usePlatform } from "@/platform/context";
 import { runAIStream } from "@/lib/ai-provider";
 import { lsofProbe } from "@/lib/port-detect";
 import type { ScriptData } from "@/lib/types";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerBody,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogPane } from "@/components/LogPane";
-import { cn } from "@/lib/utils";
-import { X, Play, Square, Pencil, Trash2, Globe, Sparkles, Loader2, Check } from "lucide-react";
+import { X, Play, Square, RotateCw, Pencil, Trash2, Globe, Sparkles, Loader2, Check } from "lucide-react";
 
 interface ScriptDetailProps {
   script: ScriptData;
 }
 
 export function ScriptDetail({ script }: ScriptDetailProps) {
-  const showDetail = useScripts((s) => s.showDetail);
-  const selectedId = useScripts((s) => s.selectedId);
-  const setShowDetail = useScripts((s) => s.setShowDetail);
+  const setSelectedId = useScripts((s) => s.setSelectedId);
   const setEditingId = useScripts((s) => s.setEditingId);
   const removeScript = useScripts((s) => s.removeScript);
 
@@ -46,13 +35,12 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
   const [portDetecting, setPortDetecting] = useState(false);
   // 端口 lsof 复核：null=未核 / true=确认在监听 / false=未监听
   const [portConfirmed, setPortConfirmed] = useState<boolean | null>(null);
+  // 外部进程停止/重启进行中（按钮转圈、防重复点）
+  const [externalBusy, setExternalBusy] = useState<null | "stop" | "restart">(null);
 
-  const isOpen = showDetail && selectedId === script.id;
   const pluginRunning = run?.status === "running";
   // 探测命令判定在运行，但本插件没有对应进程 → 是外部（终端等）启动的
   const externalRunning = probedRunning && !pluginRunning;
-  // 有运行记录（日志/运行中）→ 面板撑到 80vh 让日志填满；空闲无日志 → 收缩，不留白
-  const hasOutput = run != null;
   // 端口：脚本手填优先，其次运行后从日志自动识别
   const port = script.port ?? run?.detectedPort ?? null;
   // AI 兜底前提：AI 可用、当前无端口、且已有日志可分析
@@ -63,25 +51,53 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
     setPortConfirmed(null);
   }, [script.id, port]);
 
-  // 打开面板时探测真实运行状态，并每 3s 轮询刷新（仅在有探测命令时）
+  // 选中渲染期间探测真实运行状态，并每 3s 轮询刷新（仅在有探测命令时）
   useEffect(() => {
-    if (!isOpen || !script.probeCommand?.trim()) return;
+    if (!script.probeCommand?.trim()) return;
     probeScript(script.id, script.probeCommand);
     const timer = setInterval(() => {
       probeScript(script.id, script.probeCommand);
     }, 3000);
     return () => clearInterval(timer);
-  }, [isOpen, script.id, script.probeCommand, probeScript]);
+  }, [script.id, script.probeCommand, probeScript]);
 
   function handleRun() {
     if (pluginRunning) {
       stopRun(run!.taskId);
-    } else if (externalRunning) {
-      // 外部启动的进程，本插件没有句柄，无法中止
-      return;
     } else {
       // 统一入口：危险确认 + 参数填值 + 登录 shell 都在 requestRun 内处理
       requestRun(script);
+    }
+  }
+
+  // 外部进程没有任务句柄，只能按 LISTEN 端口杀；杀完立即复核真实状态，不等 3s 轮询
+  async function killExternal(): Promise<boolean> {
+    if (port == null) return false;
+    const ok = (await platform.killPort?.(port)) ?? false;
+    if (script.probeCommand?.trim()) await probeScript(script.id, script.probeCommand);
+    return ok;
+  }
+
+  async function handleStopExternal() {
+    if (port == null || externalBusy) return;
+    setExternalBusy("stop");
+    try {
+      const ok = await killExternal();
+      if (!ok) platform.showNotification(`未能结束 :${port} 上的进程`);
+    } finally {
+      setExternalBusy(null);
+    }
+  }
+
+  async function handleRestartExternal() {
+    if (port == null || externalBusy) return;
+    setExternalBusy("restart");
+    try {
+      await killExternal();
+      // 端口让出后按本插件命令重新拉起，之后走统一入口（危险确认/参数/登录 shell）
+      requestRun(script);
+    } finally {
+      setExternalBusy(null);
     }
   }
 
@@ -95,13 +111,16 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
 
   function handleEdit() {
     setEditingId(script.id);
-    setShowDetail(false);
+  }
+
+  function handleClose() {
+    setSelectedId(null);
   }
 
   function handleDelete() {
     if (!confirm(`确认删除脚本「${script.name}」？此操作不可撤销。`)) return;
     removeScript(script.id);
-    setShowDetail(false);
+    setSelectedId(null);
   }
 
   function handleOpenPort() {
@@ -146,44 +165,35 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
   }
 
   return (
-    <Drawer
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) setShowDetail(false);
-      }}
-    >
-      <DrawerContent className={hasOutput ? "h-[80vh]" : undefined}>
-        <DrawerHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <DrawerTitle className="font-serif text-lg truncate">
-                {script.name}
-              </DrawerTitle>
-              {script.description && (
-                <p className="mt-0.5 text-sm text-muted-foreground line-clamp-2">
-                  {script.description}
-                </p>
-              )}
-            </div>
-            <DrawerClose asChild>
-              <button
-                type="button"
-                className="ml-2 mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="关闭"
-              >
-                <X size={16} strokeWidth={1.75} />
-              </button>
-            </DrawerClose>
-          </div>
-        </DrawerHeader>
+    <div className="flex h-full flex-col">
+      {/* 头部：脚本名 + 描述 + 收起 */}
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-5 py-3.5">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate font-serif text-lg text-fg">{script.name}</h2>
+          {script.description && (
+            <p className="mt-0.5 line-clamp-2 text-sm text-fg-muted">
+              {script.description}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleClose}
+          className="mt-0.5 shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
+          aria-label="收起详情"
+        >
+          <X size={16} strokeWidth={1.75} />
+        </button>
+      </div>
 
-        <DrawerBody className={cn("space-y-4", hasOutput && "flex flex-col overflow-hidden")}>
+      {/* 主体：元信息 → 命令 → 操作 → 日志铺满 */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
           {/* 元信息卡 */}
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {script.cwd && (
-              <span className="flex items-center gap-1">
-                <span className="opacity-60">目录</span>
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+              <span className="flex min-w-0 max-w-full items-center gap-1">
+                <span className="shrink-0 opacity-60">目录</span>
+                <code className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 font-mono">
                   {script.cwd}
                 </code>
               </span>
@@ -254,43 +264,85 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
             </pre>
           </div>
 
-          {/* 操作行 */}
+          {/* 操作行：主控区靠左、编辑/删除靠右分组 */}
           <div className="flex items-center gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleRun}
-              disabled={externalRunning}
-              className="min-w-[80px] gap-1.5"
-            >
-              {pluginRunning ? (
-                <><Square size={14} strokeWidth={1.75} /> 中止</>
-              ) : externalRunning ? (
-                <><Play size={14} strokeWidth={1.75} /> 运行中</>
-              ) : (
-                <><Play size={14} strokeWidth={1.75} /> 运行</>
-              )}
-            </Button>
-            {externalRunning && (
-              <span className="text-xs text-muted-foreground">外部启动，无法在此中止</span>
+            {externalRunning ? (
+              // 外部启动：保留标识 + 停止（左）/ 重启（右）。无端口则无法定位进程，置灰。
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-subtle px-2 py-1 text-xs font-medium text-accent"
+                  title="该服务由本插件之外（如终端）启动"
+                >
+                  <span className="relative flex size-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-accent" />
+                  </span>
+                  外部启动
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStopExternal}
+                  disabled={port == null || externalBusy != null}
+                  className="gap-1.5 text-destructive hover:text-destructive"
+                  title={port == null ? "未知端口，无法定位外部进程" : `结束监听 :${port} 的进程`}
+                >
+                  {externalBusy === "stop" ? (
+                    <Loader2 size={14} strokeWidth={1.75} className="animate-spin" />
+                  ) : (
+                    <Square size={14} strokeWidth={1.75} />
+                  )}
+                  停止
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleRestartExternal}
+                  disabled={port == null || externalBusy != null}
+                  className="gap-1.5"
+                  title={port == null ? "未知端口，无法定位外部进程" : `结束 :${port} 后按本脚本重新拉起`}
+                >
+                  {externalBusy === "restart" ? (
+                    <Loader2 size={14} strokeWidth={1.75} className="animate-spin" />
+                  ) : (
+                    <RotateCw size={14} strokeWidth={1.75} />
+                  )}
+                  重启
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleRun}
+                className="min-w-[80px] gap-1.5"
+              >
+                {pluginRunning ? (
+                  <><Square size={14} strokeWidth={1.75} /> 中止</>
+                ) : (
+                  <><Play size={14} strokeWidth={1.75} /> 运行</>
+                )}
+              </Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleEdit} className="gap-1.5">
-              <Pencil size={14} strokeWidth={1.75} /> 编辑
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDelete}
-              className="gap-1.5 text-destructive hover:text-destructive"
-            >
-              <Trash2 size={14} strokeWidth={1.75} /> 删除
-            </Button>
+
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleEdit} className="gap-1.5">
+                <Pencil size={14} strokeWidth={1.75} /> 编辑
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDelete}
+                className="gap-1.5 text-destructive hover:text-destructive"
+              >
+                <Trash2 size={14} strokeWidth={1.75} /> 删除
+              </Button>
+            </div>
           </div>
 
           {/* 日志面板 */}
           <LogPane scriptId={script.id} />
-        </DrawerBody>
-      </DrawerContent>
-    </Drawer>
+      </div>
+    </div>
   );
 }

@@ -2,14 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRuns } from "@/stores/useRuns";
 import { extractParams } from "@/lib/params";
 import { Play, X } from "lucide-react";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerBody,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -62,26 +54,22 @@ export function ParamPanel() {
   }
 
   return (
-    <Drawer open={pendingRun != null} onOpenChange={(v) => { if (!v) cancelRun(); }}>
-      <DrawerContent>
-        <DrawerHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <DrawerTitle className="font-serif text-lg truncate">
-              填写参数 · {pendingRun?.name}
-            </DrawerTitle>
-            <DrawerClose asChild>
-              <button
-                type="button"
-                className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="关闭"
-              >
-                <X size={16} strokeWidth={1.75} />
-              </button>
-            </DrawerClose>
-          </div>
-        </DrawerHeader>
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
+        <h2 className="truncate font-serif text-lg text-fg">
+          填写参数 · {pendingRun?.name}
+        </h2>
+        <button
+          type="button"
+          onClick={cancelRun}
+          className="rounded p-1 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
+          aria-label="关闭"
+        >
+          <X size={16} strokeWidth={1.75} />
+        </button>
+      </div>
 
-        <DrawerBody className="space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
           <p className="text-[11px] text-fg-faint">
             填入后将替换命令中的 <code className="text-accent">{"{{占位符}}"}</code> 再运行 · 回车确认 · Esc 取消
           </p>
@@ -126,8 +114,7 @@ export function ParamPanel() {
               取消
             </Button>
           </div>
-        </DrawerBody>
-      </DrawerContent>
-    </Drawer>
+      </div>
+    </div>
   );
 }

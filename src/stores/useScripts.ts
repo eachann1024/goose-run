@@ -22,7 +22,6 @@ interface ScriptsState {
   /** 键盘上下键导航的游标（与 selectedId/打开详情解耦） */
   cursorId: string | null;
   editingId: string | null;
-  showDetail: boolean;
   isDark: boolean;
   isThemeLocked: boolean;
   sortMode: SortMode;
@@ -39,7 +38,6 @@ interface ScriptsState {
   setSelectedId(id: string | null): void;
   setCursorId(id: string | null): void;
   setEditingId(id: string | null): void;
-  setShowDetail(b: boolean): void;
   setSortMode(mode: SortMode): void;
 
   // theme actions
@@ -113,7 +111,6 @@ export const useScripts = create<ScriptsState>((set, get) => ({
   selectedId: null,
   cursorId: null,
   editingId: null,
-  showDetail: false,
   isDark: initDark,
   isThemeLocked: initLocked,
   sortMode: initSortMode,
@@ -173,10 +170,6 @@ export const useScripts = create<ScriptsState>((set, get) => ({
 
   setEditingId(id) {
     set({ editingId: id });
-  },
-
-  setShowDetail(b) {
-    set({ showDetail: b });
   },
 
   setSortMode(mode) {

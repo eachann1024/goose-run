@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, type ReactNode } from "react";
 import { useScripts, getVisibleScripts } from "@/stores/useScripts";
 import { useRuns } from "@/stores/useRuns";
 import { useAI } from "@/stores/useAI";
@@ -15,6 +15,13 @@ import { ScriptDetail } from "@/components/ScriptDetail";
 import { ScriptForm } from "@/components/ScriptForm";
 import { ParamPanel } from "@/components/ParamPanel";
 import { AiAnalysisPanel } from "@/components/AiAnalysisPanel";
+import { DetailEmpty } from "@/components/DetailEmpty";
+import { EmptyState } from "@/components/EmptyState";
+
+// 左栏宽度持久化（双栏工作台）
+const LEFT_WIDTH_KEY = "goose-run:left-width";
+const LEFT_MIN = 220;
+const LEFT_MAX = 520;
 import type {
   PluginEnterDetail,
   TaskLogEvent,
@@ -37,7 +44,6 @@ export default function App() {
   const scripts        = useScripts((s) => s.scripts);
   const selectedId     = useScripts((s) => s.selectedId);
   const editingId      = useScripts((s) => s.editingId);
-  const showDetail     = useScripts((s) => s.showDetail);
   const isDark         = useScripts((s) => s.isDark);
   const isThemeLocked  = useScripts((s) => s.isThemeLocked);
   const load           = useScripts((s) => s.load);
@@ -46,12 +52,50 @@ export default function App() {
   const setSelectedId  = useScripts((s) => s.setSelectedId);
   const setCursorId    = useScripts((s) => s.setCursorId);
   const setEditingId   = useScripts((s) => s.setEditingId);
-  const setShowDetail  = useScripts((s) => s.setShowDetail);
   const syncSystemDark = useScripts((s) => s.syncSystemDark);
 
   const appendLog  = useRuns((s) => s.appendLog);
   const finishRun  = useRuns((s) => s.finishRun);
   const runs       = useRuns((s) => s.runs);
+  const pendingRun = useRuns((s) => s.pendingRun);
+
+  // ── 左栏宽度（可拖拽分隔条 + 持久化）──
+  const [leftWidth, setLeftWidth] = useState(() => {
+    const saved = Number(localStorage.getItem(LEFT_WIDTH_KEY));
+    return saved >= LEFT_MIN && saved <= LEFT_MAX ? saved : 300;
+  });
+  const leftWidthRef = useRef(leftWidth);
+  const startDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.min(LEFT_MAX, Math.max(LEFT_MIN, ev.clientX));
+      leftWidthRef.current = w;
+      setLeftWidth(w);
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(LEFT_WIDTH_KEY, String(leftWidthRef.current));
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
+  // 窄窗响应式：视口偏窄时收紧左栏，保证右栏可用宽度（结构性降级，不切单栏）
+  const [viewportW, setViewportW] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const effectiveLeft =
+    viewportW < 720
+      ? Math.min(leftWidth, Math.max(180, Math.round(viewportW * 0.42)))
+      : leftWidth;
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const runsRef = useRef(runs);
@@ -183,7 +227,6 @@ export default function App() {
           useRuns.getState().requestRun(only);
           setSearchQuery("");
           setSelectedId(null);
-          setShowDetail(false);
           setEditingId(null);
           platform.hideWindow?.();
           return;
@@ -191,12 +234,10 @@ export default function App() {
         setSearchQuery(q);
         // 收起其他视图，回到列表
         setSelectedId(null);
-        setShowDetail(false);
         setEditingId(null);
       } else {
         // code === "run" 默认面板
         setSelectedId(null);
-        setShowDetail(false);
         setEditingId(null);
       }
     };
@@ -210,7 +251,7 @@ export default function App() {
       window.removeEventListener("goose-run:plugin-enter", onEnter);
       window.removeEventListener("goose-run:plugin-out", onOut);
     };
-  }, [platform, setSearchQuery, setSelectedId, setShowDetail, setEditingId]);
+  }, [platform, setSearchQuery, setSelectedId, setEditingId]);
 
   // ── 键盘快捷键 ──
   const handleKey = useCallback((e: KeyboardEvent) => {
@@ -218,12 +259,15 @@ export default function App() {
     const inField = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || (t as any).isContentEditable);
 
     if (e.key === "Escape") {
-      // 优先级：表单 > 详情 > 退出搜索 > 退出插件
-      if (useScripts.getState().editingId) {
+      // 优先级：表单 > 参数 > 取消选中 > 退出搜索 > 退出插件
+      const st = useScripts.getState();
+      if (st.editingId) {
         setEditingId(null);
-      } else if (useScripts.getState().showDetail) {
-        setShowDetail(false);
-      } else if (useScripts.getState().searchQuery) {
+      } else if (useRuns.getState().pendingRun) {
+        useRuns.getState().cancelRun();
+      } else if (st.selectedId) {
+        setSelectedId(null);
+      } else if (st.searchQuery) {
         setSearchQuery("");
       } else {
         platform.outPlugin?.();
@@ -242,8 +286,7 @@ export default function App() {
 
     // ↑↓ 在可见列表移动游标，回车运行（抽屉/参数面板打开时不抢键）
     const overlayOpen = () => {
-      const st = useScripts.getState();
-      return st.editingId !== null || st.showDetail || useRuns.getState().pendingRun != null;
+      return useScripts.getState().editingId !== null || useRuns.getState().pendingRun != null;
     };
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       if (overlayOpen()) return;
@@ -284,7 +327,7 @@ export default function App() {
     } else if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey) {
       setEditingId("new");
     }
-  }, [platform, setEditingId, setShowDetail, setSearchQuery, setCursorId]);
+  }, [platform, setEditingId, setSelectedId, setSearchQuery, setCursorId]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKey);
@@ -350,25 +393,56 @@ export default function App() {
   // ── 当前选中的脚本（用于 ScriptDetail）──
   const selectedScript = selectedId ? scripts.find((s) => s.id === selectedId) ?? null : null;
 
+  // 右栏内容派生（互斥优先级）：编辑 > 参数填值 > 详情 > 首次空态 > 未选空态
+  let rightContent: ReactNode;
+  if (editingId !== null) {
+    rightContent = <ScriptForm />;
+  } else if (pendingRun != null) {
+    rightContent = <ParamPanel />;
+  } else if (selectedScript) {
+    rightContent = <ScriptDetail script={selectedScript} />;
+  } else if (scripts.length === 0) {
+    rightContent = (
+      <div className="flex h-full items-center justify-center overflow-y-auto">
+        <EmptyState />
+      </div>
+    );
+  } else {
+    rightContent = <DetailEmpty />;
+  }
+
   return (
     <div
-      className="min-h-screen w-full bg-bg text-fg flex flex-col relative"
+      className="relative flex h-screen w-full flex-col overflow-hidden bg-bg text-fg"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <Header ref={searchInputRef} />
-      <main className="flex-1 w-full px-4 py-6 overflow-y-auto">
-        <ScriptList />
-      </main>
 
-      {selectedScript && showDetail && (
-        <ScriptDetail script={selectedScript} />
-      )}
+      <div className="flex min-h-0 flex-1">
+        {/* 左栏：脚本列表 */}
+        <aside
+          style={{ width: effectiveLeft }}
+          className="shrink-0 overflow-y-auto border-r border-border"
+        >
+          <ScriptList />
+        </aside>
 
-      {editingId !== null && (
-        <ScriptForm />
-      )}
+        {/* 拖拽分隔条（命中区域比 1px 视觉条宽，便于抓取） */}
+        <div
+          onMouseDown={startDrag}
+          className="relative w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-accent"
+          aria-hidden
+        >
+          <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+        </div>
+
+        {/* 右栏：详情 / 编辑 / 参数 / 空态 */}
+        <section className="min-w-0 flex-1 overflow-hidden">
+          {rightContent}
+        </section>
+      </div>
 
       <AiAnalysisPanel
         open={aiPanelOpen}
@@ -376,9 +450,6 @@ export default function App() {
         filePath={droppedFile.path}
         fileContent={droppedFile.content}
       />
-
-      {/* 运行参数填值（脚本含 {{占位符}} 时由 requestRun 收口弹出） */}
-      <ParamPanel />
 
       {dragOver && (
         dragAiReady ? (
