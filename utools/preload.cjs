@@ -244,6 +244,52 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       }
     },
 
+    // 结束占用端口的进程：按 LISTEN 端口定位 pid 并 SIGTERM。
+    // 用于「停止/重启」外部启动的服务（无任务句柄，只能按端口杀）。端口本就空闲也算成功。
+    killPort: (port) => {
+      const p = parseInt(port, 10);
+      if (!Number.isInteger(p) || p < 1 || p > 65535) return Promise.resolve(false);
+      // macOS BSD xargs 无 -r，空输入会误跑 kill；改用 shell 守卫拿 pid 再杀
+      const command = `pids=$(lsof -ti tcp:${p} -sTCP:LISTEN); if [ -n "$pids" ]; then kill $pids; fi`;
+      return new Promise((resolve) => {
+        let settled = false;
+        let child;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          try {
+            child.kill();
+          } catch {}
+          resolve(false);
+        }, 3000);
+        try {
+          child = spawn("bash", ["-lc", command], {
+            cwd: process.env.HOME,
+            env: process.env,
+            stdio: ["ignore", "ignore", "ignore"],
+          });
+          child.on("close", (code) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(code === 0);
+          });
+          child.on("error", () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+          });
+        } catch {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+          }
+        }
+      });
+    },
+
     // 运行探测：跑一条命令，exit 0 视为「运行中」。带 3s 超时，避免卡死。
     probeRunning: (command) => {
       if (typeof command !== "string" || !command.trim()) {
