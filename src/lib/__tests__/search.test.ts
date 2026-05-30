@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ScriptData } from "../types";
-import { filterScripts, matchScript } from "../search";
+import { filterScripts, highlightMatch, matchScript } from "../search";
 
 function makeScript(partial: Partial<ScriptData>): ScriptData {
   return {
@@ -98,5 +98,40 @@ describe("filterScripts", () => {
     expect(scripts).toHaveLength(2);
     expect(total).toBe(3);
     expect(scripts.map((s) => s.name)).toEqual(["Deploy Prod", "Deploy Staging"]);
+  });
+});
+
+describe("highlightMatch", () => {
+  it("空 query 返回整段不高亮", () => {
+    const result = highlightMatch("hello world", "");
+    expect(result).toEqual([{ text: "hello world", highlight: false }]);
+  });
+
+  it("单关键字高亮", () => {
+    const result = highlightMatch("hello world", "hello");
+    const highlighted = result.filter((p) => p.highlight).map((p) => p.text);
+    expect(highlighted).toEqual(["hello"]);
+    const plain = result.filter((p) => !p.highlight).map((p) => p.text);
+    expect(plain).toContain(" world");
+  });
+
+  it("多关键字：所有匹配片段均高亮，含同词第二次出现（lastIndex 漂移回归）", () => {
+    const result = highlightMatch("ab x cd y ab", "ab cd");
+    const highlighted = result.filter((p) => p.highlight).map((p) => p.text);
+    // "ab" 出现两次，"cd" 出现一次，全部应高亮
+    expect(highlighted).toEqual(["ab", "cd", "ab"]);
+    const plain = result.filter((p) => !p.highlight).map((p) => p.text);
+    expect(plain).toEqual([" x ", " y "]);
+  });
+
+  it("大小写不敏感：query 'Ab'，text 中 ab/AB/Ab 全部高亮", () => {
+    const result = highlightMatch("ab AB Ab", "Ab");
+    const highlighted = result.filter((p) => p.highlight).map((p) => p.text.toLowerCase());
+    expect(highlighted).toEqual(["ab", "ab", "ab"]);
+  });
+
+  it("纯 tag: 前缀词不产生高亮", () => {
+    const result = highlightMatch("deploy prod", "tag:deploy");
+    expect(result).toEqual([{ text: "deploy prod", highlight: false }]);
   });
 });
