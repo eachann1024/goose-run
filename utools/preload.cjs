@@ -111,8 +111,11 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     copyText: (text) => {
       safeCall(utools?.copyText, text);
     },
-    showNotification: (text) => {
-      safeCall(utools?.showNotification, text);
+    showNotification: (text, clickFeatureCode) => {
+      safeCall(utools?.showNotification, text, clickFeatureCode);
+    },
+    openExternal: (url) => {
+      safeCall(utools?.shellOpenExternal, url);
     },
     outPlugin: () => {
       safeCall(utools?.outPlugin);
@@ -147,12 +150,14 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       safeCall(utools?.removeSubInput);
     },
 
-    startTask: (taskId, { script, cwd, env, shell }) => {
+    startTask: (taskId, { script, cwd, env, shell, login }) => {
       if (tasks.has(taskId)) return false;
       const sh = shell === "zsh" ? "zsh" : shell === "sh" ? "sh" : "bash";
+      const useLogin = login === false ? false : true;
+      const shArgs = useLogin ? ["-lc", script] : ["-c", script];
       let proc;
       try {
-        proc = spawn(sh, ["-c", script], {
+        proc = spawn(sh, shArgs, {
           cwd: cwd && cwd.trim() ? cwd : process.env.HOME,
           env: { ...process.env, ...(env || {}) },
           detached: true,
@@ -173,6 +178,10 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
         emit("error", { taskId, message: String((err && err.message) || err) }),
       );
       proc.on("exit", (code, signal) => {
+        if (proc._killTimer) {
+          clearTimeout(proc._killTimer);
+          proc._killTimer = null;
+        }
         tasks.delete(taskId);
         emit("exit", { taskId, code, signal, endedAt: Date.now() });
       });
@@ -192,6 +201,16 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
         } else {
           p.kill("SIGTERM");
         }
+        p._killTimer = setTimeout(() => {
+          if (!tasks.has(taskId)) return;
+          try {
+            process.kill(-p.pid, "SIGKILL");
+          } catch {
+            try {
+              p.kill("SIGKILL");
+            } catch {}
+          }
+        }, 3000);
         return true;
       } catch {
         return false;
@@ -199,6 +218,75 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     },
 
     listTasks: () => Array.from(tasks.keys()),
+
+    pickDirectory: () => {
+      try {
+        const paths = utools.showOpenDialog({
+          title: "选择工作目录",
+          buttonLabel: "选择",
+          properties: ["openDirectory"],
+        });
+        if (!paths || paths.length === 0) return null;
+        return paths[0];
+      } catch (err) {
+        console.error("[goose-run] pickDirectory failed:", err);
+        return null;
+      }
+    },
+
+    readFileText: (path) => {
+      try {
+        const fs = require("fs");
+        return fs.readFileSync(path, "utf-8");
+      } catch (err) {
+        console.error("[goose-run] readFileText failed:", err);
+        return null;
+      }
+    },
+
+    // 运行探测：跑一条命令，exit 0 视为「运行中」。带 3s 超时，避免卡死。
+    probeRunning: (command) => {
+      if (typeof command !== "string" || !command.trim()) {
+        return Promise.resolve(false);
+      }
+      return new Promise((resolve) => {
+        let settled = false;
+        let child;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          try {
+            child.kill();
+          } catch {}
+          resolve(false);
+        }, 3000);
+        try {
+          child = spawn("bash", ["-lc", command], {
+            cwd: process.env.HOME,
+            env: process.env,
+            stdio: ["ignore", "ignore", "ignore"],
+          });
+          child.on("close", (code) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(code === 0);
+          });
+          child.on("error", () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+          });
+        } catch {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+          }
+        }
+      });
+    },
   };
 
   utools.onPluginEnter(({ code, type, payload }) => {
@@ -210,8 +298,20 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
   });
 
   if (typeof utools.onPluginOut === "function") {
-    utools.onPluginOut(() => {
+    utools.onPluginOut((isKill) => {
       subInputHandler = null;
+      if (isKill === true) {
+        tasks.forEach((p) => {
+          try {
+            process.kill(-p.pid, "SIGKILL");
+          } catch {
+            try {
+              p.kill("SIGKILL");
+            } catch {}
+          }
+        });
+        tasks.clear();
+      }
       window.dispatchEvent(new CustomEvent("goose-run:plugin-out"));
     });
   }

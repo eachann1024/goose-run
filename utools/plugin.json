@@ -21,6 +21,20 @@
       "cmds": [
         { "type": "regex", "label": "鹅的运行：快速运行", "match": "/^(gr|鹅运)\\s+\\S+/i" }
       ]
+    },
+    {
+      "code": "import-file",
+      "explain": "导入脚本文件到鹅的运行",
+      "cmds": [
+        {
+          "type": "files",
+          "label": "用鹅的运行导入脚本",
+          "fileType": "file",
+          "extensions": ["sh", "bash", "zsh", "py", "js", "mjs", "cjs", "ts", "rb", "pl", "php", "lua", "r", "go"],
+          "minLength": 1,
+          "maxLength": 1
+        }
+      ]
     }
   ],
   "main": "dist/index.html",

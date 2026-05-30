@@ -30,6 +30,9 @@ try {
     const pluginConfig = JSON.parse(
       fs.readFileSync(pluginConfigPath, "utf-8"),
     );
+    // 版本号以 package.json 为唯一来源，避免与 plugin.json 双维护漂移
+    const rootPkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf-8"));
+    if (rootPkg.version) pluginConfig.version = rootPkg.version;
     pluginConfig.main = "index.html";
     pluginConfig.preload = "preload.js";
     fs.writeFileSync(
