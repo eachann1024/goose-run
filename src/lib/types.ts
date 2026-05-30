@@ -21,6 +21,17 @@ export interface ScriptData {
   shell?: ShellKind;
   /** 危险操作需要二次确认才能跑 */
   confirmBeforeRun?: boolean;
+  /**
+   * 服务监听端口（可选）。填了即可在详情页一键在浏览器打开 localhost:端口，
+   * 并自动据此生成 lsof 探测命令。留空表示该脚本不监听端口或端口待运行后检测。
+   */
+  port?: number;
+  /**
+   * 运行探测命令：一条返回 exit 0 = 运行中、非 0 = 未运行的 shell 命令。
+   * 用于检测脚本「真实是否在运行」——即使不是通过本插件启动的（如终端里跑的）。
+   * 例：服务型 `lsof -iTCP:5182 -sTCP:LISTEN`，进程型 `pgrep -f "server.py"`。
+   */
+  probeCommand?: string;
   createdAt: number;
   updatedAt: number;
   /** 最近一次运行的摘要（持久化），不含日志正文 */
@@ -39,6 +50,8 @@ export type NewScriptInput = Omit<ScriptData, "id" | "createdAt" | "updatedAt" |
 
 /** 单行日志 */
 export interface LogLine {
+  /** 单调自增 id，作为虚拟列表稳定 key（slice 截断后下标会平移，不能用 index） */
+  id: number;
   ts: number;
   stream: "stdout" | "stderr" | "system";
   text: string;
@@ -53,6 +66,8 @@ export interface RunState {
   endedAt?: number;
   exitCode?: number | null;
   lines: LogLine[];
+  /** 运行后从日志里自动识别出的监听端口（正则优先，AI 兜底回填） */
+  detectedPort?: number;
 }
 
 export interface TaskLogEvent { taskId: string; stream: "stdout" | "stderr"; text: string; }
@@ -63,5 +78,6 @@ export interface TaskErrorEvent { taskId: string; message: string; }
 export interface PluginEnterDetail {
   code: string;
   type?: string;
-  payload?: string;
+  /** run/quick 时为字符串关键字；files-feature 时为 uTools 文件描述数组 */
+  payload?: unknown;
 }
