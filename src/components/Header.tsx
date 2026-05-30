@@ -15,7 +15,7 @@ export const Header = forwardRef<HTMLInputElement>(function Header(_, ref) {
 
   return (
     <>
-    <header className="flex h-12 w-full shrink-0 items-center gap-3 px-4 border-b border-border bg-bg/95 backdrop-blur sticky top-0 z-10">
+    <header className="flex h-12 w-full shrink-0 items-center gap-3 px-4 border-b border-border bg-bg sticky top-0 z-10">
       {/* 左：Logo + 标题 */}
       <div className="flex items-center gap-2 whitespace-nowrap">
         <h1 className="font-serif text-lg font-semibold text-fg">

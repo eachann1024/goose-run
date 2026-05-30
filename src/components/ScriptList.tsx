@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useScripts, sortScripts } from "@/stores/useScripts";
 import type { SortMode } from "@/stores/useScripts";
 import { useRuns } from "@/stores/useRuns";
@@ -9,14 +10,28 @@ export function ScriptList() {
   const scripts = useScripts((s) => s.scripts);
   const searchQuery = useScripts((s) => s.searchQuery);
   const selectedId = useScripts((s) => s.selectedId);
+  const cursorId = useScripts((s) => s.cursorId);
   const setSelectedId = useScripts((s) => s.setSelectedId);
   const setShowDetail = useScripts((s) => s.setShowDetail);
   const sortMode = useScripts((s) => s.sortMode);
   const setSortMode = useScripts((s) => s.setSortMode);
 
-  const startRun = useRuns((s) => s.startRun);
+  const requestRun = useRuns((s) => s.requestRun);
   const stopRun = useRuns((s) => s.stopRun);
   const getRunByScript = useRuns((s) => s.getRunByScript);
+  const probeScript = useRuns((s) => s.probeScript);
+
+  // 进入面板时对所有带探测命令的脚本探测一次（趋近零成本，非常驻轮询）；插件再次进入也复探
+  useEffect(() => {
+    const probeAll = () => {
+      for (const s of useScripts.getState().scripts) {
+        if (s.probeCommand?.trim()) probeScript(s.id, s.probeCommand);
+      }
+    };
+    probeAll();
+    window.addEventListener("goose-run:plugin-enter", probeAll);
+    return () => window.removeEventListener("goose-run:plugin-enter", probeAll);
+  }, [probeScript]);
 
   const { scripts: filteredScripts, total } = filterScripts(scripts, searchQuery);
   const sorted = sortScripts(filteredScripts, sortMode);
@@ -73,19 +88,13 @@ export function ScriptList() {
             key={s.id}
             script={s}
             isSelected={selectedId === s.id}
+            isCursor={cursorId === s.id}
             index={index}
             onSelect={() => {
               setSelectedId(s.id);
               setShowDetail(true);
             }}
-            onRun={() => {
-              startRun(s.id, {
-                script: s.script,
-                cwd: s.cwd,
-                env: s.env,
-                shell: s.shell,
-              });
-            }}
+            onRun={() => requestRun(s)}
             onStop={() => {
               if (run?.taskId) {
                 stopRun(run.taskId);
