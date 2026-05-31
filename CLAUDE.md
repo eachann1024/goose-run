@@ -42,7 +42,9 @@ React UI → Zustand Store → PlatformAdapter → uTools preload / Web localSto
 - UI 组件优先使用 shadcn/ui，无覆盖时查 npm 组件库，仍无则手写
 - 按钮图标统一用 Lucide，不用 emoji
 
+
 ## 禁止事项
 
 - 不创建 src-tauri/ 目录
 - 不在 package.json 中添加 @tauri-apps/* / electron 依赖
+- 不在本仓库新增 SwiftUI / AppKit / Xcode 工程（要做原生版另起 `goose-run-mac/`）
