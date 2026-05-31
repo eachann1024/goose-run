@@ -119,9 +119,9 @@ export const useRuns = create<RunsState>((set, get) => ({
   async startRun(scriptId, opts) {
     const taskId = crypto.randomUUID();
     const platform = getPlatform();
-    const ok = await platform.startTask({ taskId, ...opts });
-    if (!ok) return null;
 
+    // 先建 run 再 startTask：startTask 内部会「同步」emit("start") 派发启动横幅，
+    // 若 run 尚未入表，appendLog 会因找不到 run 而丢弃这行（启动时间/日期就此消失）。
     const runState: RunState = {
       taskId,
       scriptId,
@@ -129,11 +129,17 @@ export const useRuns = create<RunsState>((set, get) => ({
       startedAt: Date.now(),
       lines: [],
     };
-
     set((state) => ({
       runs: { ...state.runs, [taskId]: runState },
       taskIdByScript: { ...state.taskIdByScript, [scriptId]: taskId },
     }));
+
+    const ok = await platform.startTask({ taskId, ...opts });
+    if (!ok) {
+      // 启动失败：撤掉这条占位 run，避免留下空壳
+      get().clearRun(taskId);
+      return null;
+    }
 
     return taskId;
   },

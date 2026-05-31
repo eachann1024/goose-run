@@ -6,6 +6,7 @@ import { runAIStream } from "@/lib/ai-provider";
 import { buildDiagnosisMessages, extractFixCommand } from "@/lib/ai-provider/log-context";
 import type { ScriptData, RunState } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { LogText } from "@/components/LogText";
 import { toast } from "sonner";
 
 interface AiTabProps {
@@ -124,7 +125,7 @@ export function AiTab({ script, run, triggerNonce }: AiTabProps) {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto">
+    <div className="selectable flex h-full flex-col gap-3 overflow-y-auto">
       {/* 顶部操作行 */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-sm text-fg">
@@ -161,7 +162,7 @@ export function AiTab({ script, run, triggerNonce }: AiTabProps) {
           </div>
           {streamText && (
             <pre className="whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs leading-relaxed">
-              {streamText}
+              <LogText text={streamText} />
             </pre>
           )}
           <Button variant="ghost" size="sm" onClick={() => abortRef.current?.abort()}>取消</Button>
@@ -181,7 +182,7 @@ export function AiTab({ script, run, triggerNonce }: AiTabProps) {
         <div className="space-y-3">
           {streamText && (
             <pre className="whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs leading-relaxed">
-              {streamText}
+              <LogText text={streamText} />
             </pre>
           )}
           {fixCommand && (

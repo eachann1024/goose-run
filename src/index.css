@@ -150,6 +150,14 @@
     user-select: text;
   }
 
+  /* 日志 / AI 输出：允许滑动选中复制（覆盖 body 的 user-select:none） */
+  .selectable,
+  .selectable * {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: auto;
+  }
+
   *:focus {
     outline: none !important;
   }

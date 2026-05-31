@@ -182,7 +182,7 @@ export function AiAnalysisPanel({ open, onOpenChange, filePath, fileContent }: A
 
   return (
     <Drawer open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DrawerContent>
+      <DrawerContent className="selectable">
         <DrawerHeader className="pb-2">
           <div className="flex items-center justify-between">
             <DrawerTitle className="font-serif text-lg flex items-center gap-2">

@@ -28,7 +28,7 @@ export function useAiLaunch() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      aiLog("✨ AI 启动管家来啦，我先了解一下你这个脚本的情况，然后一步步帮你跑起来。");
+      aiLog("✨ AI 启动管家来啦，我先直接帮你把它跑起来，遇到问题再排查。");
 
       let started = false;
 

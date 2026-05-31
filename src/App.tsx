@@ -155,7 +155,7 @@ export default function App() {
     };
     const onStart = (e: Event) => {
       const d = (e as CustomEvent<TaskStartEvent>).detail;
-      appendLog(d.taskId, { ts: d.startedAt, stream: "system", text: `▶ 启动于 ${new Date(d.startedAt).toLocaleTimeString()}` });
+      appendLog(d.taskId, { ts: d.startedAt, stream: "system", text: `▶ 启动于 ${new Date(d.startedAt).toLocaleString()}` });
     };
     const onExit = (e: Event) => {
       const d = (e as CustomEvent<TaskExitEvent>).detail;
