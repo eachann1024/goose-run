@@ -2,8 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRuns } from "@/stores/useRuns";
 import { cn } from "@/lib/utils";
+import { LogText } from "@/components/LogText";
 import type { LogLine, RunState } from "@/lib/types";
 import { Check, X, Square, Sparkles } from "lucide-react";
+
+// 行内时间戳：HH:MM:SS（日期看启动横幅，逐行只给时分秒，省宽度）
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 function classify(line: LogLine): string {
   const t = line.text;
@@ -177,7 +185,7 @@ export function LogPane({ scriptId, canExplain, onExplain }: LogPaneProps) {
         ref={containerRef}
         onScroll={handleScroll}
         className={cn(
-          "bg-[#1b1815] rounded-md p-3 font-mono text-[12.5px] leading-[1.55]",
+          "selectable bg-[#1b1815] rounded-md p-3 font-mono text-[12.5px] leading-[1.55]",
           lines.length === 0
             ? "flex items-center justify-center"
             : "overflow-y-auto flex-1 min-h-[120px]",
@@ -194,10 +202,15 @@ export function LogPane({ scriptId, canExplain, onExplain }: LogPaneProps) {
                   key={vi.key}
                   data-index={vi.index}
                   ref={rowVirtualizer.measureElement}
-                  className={cn("whitespace-pre-wrap break-all", classify(line))}
+                  className="flex gap-2"
                   style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vi.start}px)` }}
                 >
-                  {line.text || " "}
+                  <span className="shrink-0 select-none tabular-nums text-[11px] leading-[1.55] text-[#5c5650]">
+                    {fmtTime(line.ts)}
+                  </span>
+                  <span className={cn("min-w-0 flex-1 whitespace-pre-wrap break-all", classify(line))}>
+                    <LogText text={line.text} />
+                  </span>
                 </div>
               );
             })}

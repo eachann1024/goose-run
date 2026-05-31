@@ -4,7 +4,7 @@ import { usePlatform } from "@/platform/context";
 import type { ShellKind } from "@/lib/types";
 import { extractParams } from "@/lib/params";
 import { lsofProbe, isAutoLsof } from "@/lib/port-detect";
-import { X, FolderOpen } from "lucide-react";
+import { X, FolderOpen, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,6 +51,7 @@ export function ScriptForm() {
 
   const [form, setForm] = useState<FormState>(defaultForm);
   const [errors, setErrors] = useState<{ name?: string; script?: string }>({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const params = extractParams(form.script);
 
   const isNew = editingId === "new";
@@ -61,6 +62,7 @@ export function ScriptForm() {
     if (!editingId || editingId === "new") {
       setForm(defaultForm);
       setErrors({});
+      setShowAdvanced(false);
       return;
     }
     const existing = scripts.find((s) => s.id === editingId);
@@ -77,6 +79,14 @@ export function ScriptForm() {
         probeCommand: existing.probeCommand ?? "",
       });
       setErrors({});
+      // 已填过高级字段则默认展开，避免编辑时看不到已有配置
+      setShowAdvanced(
+        (existing.shell != null && existing.shell !== "bash") ||
+          existing.port != null ||
+          !!existing.probeCommand ||
+          (existing.tags?.length ?? 0) > 0 ||
+          existing.confirmBeforeRun === true
+      );
     }
   }, [editingId]);
 
@@ -195,68 +205,6 @@ export function ScriptForm() {
             )}
           </div>
 
-          {/* 描述 */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">描述</label>
-            <Input
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="可选，简要说明用途"
-            />
-          </div>
-
-          {/* Shell + 端口 + 工作目录（同行） */}
-          <div className="flex gap-3">
-            <div className="space-y-1 w-24 shrink-0">
-              <label className="text-xs font-medium text-muted-foreground">Shell</label>
-              <Select
-                value={form.shell}
-                onValueChange={(v) => set("shell", v as ShellKind)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bash">bash</SelectItem>
-                  <SelectItem value="zsh">zsh</SelectItem>
-                  <SelectItem value="sh">sh</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1 w-24 shrink-0">
-              <label className="text-xs font-medium text-muted-foreground">端口</label>
-              <Input
-                value={form.port}
-                onChange={(e) => setPort(e.target.value)}
-                placeholder="留空"
-                inputMode="numeric"
-                className="font-mono text-xs"
-              />
-            </div>
-            <div className="space-y-1 flex-1 min-w-0">
-              <label className="text-xs font-medium text-muted-foreground">工作目录</label>
-              <div className="flex gap-1.5">
-                <Input
-                  value={form.cwd}
-                  onChange={(e) => set("cwd", e.target.value)}
-                  placeholder="$HOME"
-                  className="font-mono text-xs"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handlePickDir}
-                  className="shrink-0"
-                  aria-label="选择工作目录"
-                  title="选择工作目录"
-                >
-                  <FolderOpen size={15} strokeWidth={1.75} />
-                </Button>
-              </div>
-            </div>
-          </div>
-
           {/* 命令 */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
@@ -290,46 +238,130 @@ export function ScriptForm() {
             )}
           </div>
 
-          {/* 运行探测命令 */}
+          {/* 工作目录 */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">运行探测命令</label>
-            <Input
-              value={form.probeCommand}
-              onChange={(e) => set("probeCommand", e.target.value)}
-              placeholder={`如：lsof -iTCP:5182 -sTCP:LISTEN  或  pgrep -f "server.py"`}
-              className="font-mono text-xs"
-            />
-            <p className="text-[11px] text-fg-faint">
-              可选。返回成功（exit 0）即视为运行中，用于检测在终端等外部启动的进程。填了上方端口会自动生成 lsof 探测命令，手写后不再覆盖。
-            </p>
+            <label className="text-xs font-medium text-muted-foreground">工作目录</label>
+            <div className="flex gap-1.5">
+              <Input
+                value={form.cwd}
+                onChange={(e) => set("cwd", e.target.value)}
+                placeholder="$HOME"
+                className="font-mono text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handlePickDir}
+                className="shrink-0"
+                aria-label="选择工作目录"
+                title="选择工作目录"
+              >
+                <FolderOpen size={15} strokeWidth={1.75} />
+              </Button>
+            </div>
           </div>
 
-          {/* 标签 */}
+          {/* 描述 */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">标签</label>
+            <label className="text-xs font-medium text-muted-foreground">描述</label>
             <Input
-              value={form.tags}
-              onChange={(e) => set("tags", e.target.value)}
-              placeholder="用逗号或空格分隔，如：部署, 清理"
+              value={form.description}
+              onChange={(e) => set("description", e.target.value)}
+              placeholder="可选，简要说明用途"
             />
           </div>
 
-          {/* 运行前确认 */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="confirm-before-run"
-              checked={form.confirmBeforeRun}
-              onCheckedChange={(checked) =>
-                set("confirmBeforeRun", checked === true)
-              }
-            />
-            <label
-              htmlFor="confirm-before-run"
-              className="text-sm text-muted-foreground cursor-pointer select-none"
+          {/* 高级选项（默认收起） */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="flex items-center gap-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg"
             >
-              运行前确认（危险脚本）
-            </label>
+              <ChevronRight
+                size={14}
+                strokeWidth={1.75}
+                className={`transition-transform ${showAdvanced ? "rotate-90" : ""}`}
+              />
+              高级选项
+            </button>
           </div>
+
+          {showAdvanced && (
+            <div className="space-y-3 border-l border-border pl-3">
+              {/* Shell + 端口（同行） */}
+              <div className="flex gap-3">
+                <div className="space-y-1 w-24 shrink-0">
+                  <label className="text-xs font-medium text-muted-foreground">Shell</label>
+                  <Select
+                    value={form.shell}
+                    onValueChange={(v) => set("shell", v as ShellKind)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bash">bash</SelectItem>
+                      <SelectItem value="zsh">zsh</SelectItem>
+                      <SelectItem value="sh">sh</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 w-24 shrink-0">
+                  <label className="text-xs font-medium text-muted-foreground">端口</label>
+                  <Input
+                    value={form.port}
+                    onChange={(e) => setPort(e.target.value)}
+                    placeholder="留空"
+                    inputMode="numeric"
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* 运行探测命令 */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">运行探测命令</label>
+                <Input
+                  value={form.probeCommand}
+                  onChange={(e) => set("probeCommand", e.target.value)}
+                  placeholder={`如：lsof -iTCP:5182 -sTCP:LISTEN  或  pgrep -f "server.py"`}
+                  className="font-mono text-xs"
+                />
+                <p className="text-[11px] text-fg-faint">
+                  可选。返回成功（exit 0）即视为运行中，用于检测在终端等外部启动的进程。填了端口会自动生成 lsof 探测命令，手写后不再覆盖。
+                </p>
+              </div>
+
+              {/* 标签 */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">标签</label>
+                <Input
+                  value={form.tags}
+                  onChange={(e) => set("tags", e.target.value)}
+                  placeholder="用逗号或空格分隔，如：部署, 清理"
+                />
+              </div>
+
+              {/* 运行前确认 */}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="confirm-before-run"
+                  checked={form.confirmBeforeRun}
+                  onCheckedChange={(checked) =>
+                    set("confirmBeforeRun", checked === true)
+                  }
+                />
+                <label
+                  htmlFor="confirm-before-run"
+                  className="text-sm text-muted-foreground cursor-pointer select-none"
+                >
+                  运行前确认（危险脚本）
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* 操作按钮 */}
           <div className="flex gap-2 pt-1">

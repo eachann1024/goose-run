@@ -49,6 +49,23 @@ interface ScriptsState {
 const DARK_KEY = "goose-run-dark";
 const LOCK_KEY = "goose-run-dark-locked";
 const SORT_KEY = "goose-run:sort-mode";
+const SEEDED_KEY = "goose-run:seeded";
+
+/**
+ * 首次使用时自动配一个初始化脚本，避免一进来空荡荡看着怪。
+ * 只在「从没种过」且「当前确实没有任何脚本」时种一次；用户清空脚本后不会再种回来。
+ */
+const SEED_SCRIPT: NewScriptInput = {
+  name: "初始化",
+  description: "第一个示例脚本，点运行试试看",
+  script: [
+    'echo "你好，鹅的运行 🦢"',
+    'echo "当前目录：$(pwd)"',
+    'echo "Shell：$SHELL"',
+    'echo "时间：$(date \'+%Y-%m-%d %H:%M:%S\')"',
+  ].join("\n"),
+  shell: "bash",
+};
 
 /**
  * 排序工具函数，可在组件中直接 import 使用。
@@ -116,8 +133,22 @@ export const useScripts = create<ScriptsState>((set, get) => ({
   sortMode: initSortMode,
 
   async load() {
-    const scripts = await platform.loadScripts();
-    set({ scripts: Array.isArray(scripts) ? scripts : [] });
+    const loaded = await platform.loadScripts();
+    let scripts = Array.isArray(loaded) ? loaded : [];
+    if (scripts.length === 0) {
+      if (localStorage.getItem(SEEDED_KEY) === "1") {
+        // 已种过且仍为空 —— 可能是并发的另一次 load 刚种上，复读一次拿最新，避免用陈旧空值覆盖
+        const fresh = await platform.loadScripts();
+        scripts = Array.isArray(fresh) ? fresh : [];
+      } else {
+        // 首次使用 → 种一个初始化脚本（只种一次，用户清空后不复种）
+        const now = Date.now();
+        scripts = [{ ...SEED_SCRIPT, id: crypto.randomUUID(), createdAt: now, updatedAt: now }];
+        platform.saveScripts(scripts);
+        localStorage.setItem(SEEDED_KEY, "1");
+      }
+    }
+    set({ scripts });
   },
 
   addScript(input) {
