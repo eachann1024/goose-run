@@ -52,14 +52,16 @@ interface RunsState {
   finishRun(taskId: string, exitCode: number | null, signal: string | null): void;
 
   /**
-   * 开启一段 AI 智能启动会话：本地建一个 kind:"ai" 的 run（不 spawn），占用该脚本当前 run 位。
-   * 返回 aiTaskId —— 后续 AI 叙述（aiLog）与真实启动日志都进这个 run；start_service 复用此 id 调 startTask。
+   * 开启一段 AI 智能启动会话：本地建一个 kind:"ai" 的 run（不 spawn），占用该脚本当前 run 位，
+   * 让运行按钮显示「AI 启动中」。AI 的思考/叙述进 useAiThread，不进这个 run 的日志；
+   * 待 start_service 真正 spawn 后，真实 stdout/stderr 才合流进这个 run，并复用此 taskId。
+   * 返回 aiTaskId。
    */
   beginAiSession(scriptId: string): string;
-  /** 向 AI 会话 run 追加一行小白话叙述（stream:"ai"） */
-  aiLog(aiTaskId: string, text: string): void;
   /** 收尾 AI 会话（仅在没有真正 start_service 启动服务、需手动结束时调） */
   endAiSession(aiTaskId: string, ok: boolean): void;
+  /** 回填子进程真实 PID（start 事件触发），AI 智能启动时作为「操作终端获取到的 ID」展示 */
+  setPid(taskId: string, pid: number): void;
   /** 手动回填检测到的端口（AI 兜底识别后调用） */
   setDetectedPort(taskId: string, port: number): void;
   stopRun(taskId: string): Promise<void>;
@@ -176,8 +178,12 @@ export const useRuns = create<RunsState>((set, get) => ({
     return aiTaskId;
   },
 
-  aiLog(aiTaskId, text) {
-    get().appendLog(aiTaskId, { ts: Date.now(), stream: "ai", text });
+  setPid(taskId, pid) {
+    set((state) => {
+      const run = state.runs[taskId];
+      if (!run || run.pid === pid) return state;
+      return { runs: { ...state.runs, [taskId]: { ...run, pid } } };
+    });
   },
 
   endAiSession(aiTaskId, ok) {

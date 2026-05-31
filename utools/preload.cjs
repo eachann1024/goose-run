@@ -167,7 +167,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
         return false;
       }
       tasks.set(taskId, proc);
-      emit("start", { taskId, startedAt: Date.now() });
+      emit("start", { taskId, startedAt: Date.now(), pid: proc.pid });
       proc.stdout.on("data", (d) =>
         emit("log", { taskId, stream: "stdout", text: d.toString() }),
       );

@@ -155,6 +155,8 @@ export default function App() {
     };
     const onStart = (e: Event) => {
       const d = (e as CustomEvent<TaskStartEvent>).detail;
+      // 真实 PID 回填（AI 智能启动据此展示「操作终端获取到的 ID」）
+      if (d.pid != null) useRuns.getState().setPid(d.taskId, d.pid);
       appendLog(d.taskId, { ts: d.startedAt, stream: "system", text: `▶ 启动于 ${new Date(d.startedAt).toLocaleString()}` });
     };
     const onExit = (e: Event) => {

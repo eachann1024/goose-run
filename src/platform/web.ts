@@ -43,7 +43,9 @@ export function createWebAdapter(): PlatformAdapter {
     startTask(opts: StartTaskOptions): boolean {
       if (fakeTasks.has(opts.taskId)) return false;
       const startedAt = Date.now();
-      emit("start", { taskId: opts.taskId, startedAt });
+      // web 降级无真实进程，给一个模拟 PID 仅供 UI 演示「操作终端获取到的 ID」
+      const fakePid = 10000 + Math.floor((startedAt / 7) % 50000);
+      emit("start", { taskId: opts.taskId, startedAt, pid: fakePid });
 
       const lines = [
         "[web 模拟] 不会真的执行，仅渲染日志样式",

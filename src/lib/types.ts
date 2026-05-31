@@ -69,12 +69,36 @@ export interface RunState {
   lines: LogLine[];
   /** 运行后从日志里自动识别出的监听端口（正则优先，AI 兜底回填） */
   detectedPort?: number;
-  /** ai = AI 智能启动会话（叙述+真实启动日志合流）；缺省/script = 普通脚本运行 */
+  /**
+   * ai = AI 智能启动会话（按钮显示「AI 启动中」）。真正 start_service 后转为 script。
+   * 注意：AI 的思考/叙述只进 AI 模块（useAiThread），日志只留真实 stdout/stderr。
+   */
   kind?: "script" | "ai";
+  /** 真实子进程 PID（start 事件回填），AI 智能启动时作为「操作终端获取到的 ID」展示 */
+  pid?: number;
+}
+
+/**
+ * AI 模块（启动管家）的一条对话消息。严格独立于运行日志：
+ * think = 进行中的思考/步骤，user = 用户提问，ai = 管家回复。
+ */
+export type AiMsgRole = "think" | "user" | "ai";
+export interface AiMessage {
+  /** 单调自增 id，作为列表稳定 key */
+  id: number;
+  role: AiMsgRole;
+  /** 正文：think/user 为纯文本；ai 含 `code`/#sh-终端号/:端口 时由前端安全高亮（非 HTML 注入） */
+  text: string;
+  /** think 专用：true=进行中（转圈）/ false=已完成（对勾） */
+  pending?: boolean;
+  /** ai 专用：可一键复制/填入新脚本的修复命令 */
+  fixCommand?: string;
+  /** ai 专用：正在流式生成中（显示游标、避免空气泡误判） */
+  streaming?: boolean;
 }
 
 export interface TaskLogEvent { taskId: string; stream: "stdout" | "stderr"; text: string; }
-export interface TaskStartEvent { taskId: string; startedAt: number; }
+export interface TaskStartEvent { taskId: string; startedAt: number; pid?: number; }
 export interface TaskExitEvent  { taskId: string; code: number | null; signal: string | null; endedAt: number; }
 export interface TaskErrorEvent { taskId: string; message: string; }
 

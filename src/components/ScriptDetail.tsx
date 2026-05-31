@@ -63,14 +63,14 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
     setPortConfirmed(null);
   }, [script.id, port]);
 
-  // 运行态上升沿：脚本一旦开始运行（无论从列表、键盘还是本面板触发），自动切到日志 tab 看输出
+  // 运行态上升沿：脚本一旦开始运行就自动切 tab——AI 智能启动看「AI」(思考/终端会话)，普通运行看「日志」
   const prevRunningRef = useRef(false);
   useEffect(() => {
     if (pluginRunning && !prevRunningRef.current) {
-      setActiveTab("log");
+      setActiveTab(run?.kind === "ai" ? "ai" : "log");
     }
     prevRunningRef.current = pluginRunning;
-  }, [pluginRunning]);
+  }, [pluginRunning, run?.kind]);
 
   // 选中渲染期间探测真实运行状态，并每 3s 轮询刷新（仅在有探测命令时）
   useEffect(() => {
@@ -100,7 +100,8 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
 
   function handleAiLaunch() {
     if (!aiAvailable || pluginRunning) return;
-    setActiveTab("log");
+    // AI 智能启动：思考/步骤/终端会话都在 AI 模块呈现，先切到 AI 标签
+    setActiveTab("ai");
     aiLaunch(script);
   }
   const longPress = useLongPress({
@@ -474,8 +475,8 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
           <LogPane scriptId={script.id} canExplain={canExplain} onExplain={handleExplain} />
         </div>
 
-        {/* AI 诊断（保活：保留诊断结果） */}
-        <div className={activeTab === "ai" ? "min-h-0 flex-1 px-5 py-4" : "hidden"}>
+        {/* AI 模块（保活：保留对话线程；思考/回复/终端会话只在这里，不进日志） */}
+        <div className={activeTab === "ai" ? "flex min-h-0 flex-1 flex-col px-5 py-4" : "hidden"}>
           <AiTab script={script} run={run} triggerNonce={explainNonce} />
         </div>
       </div>
