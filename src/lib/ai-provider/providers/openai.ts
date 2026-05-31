@@ -35,11 +35,12 @@ export async function handleOpenAIStream(
   const toolAcc: AIToolCall[] = [];
 
   for await (const line of readSSELines(response, signal)) {
-    if (line === "data: [DONE]") break;
-    if (line.startsWith("data: ")) {
+    if (line === "data: [DONE]" || line === "data:[DONE]") break;
+    if (line.startsWith("data:")) {
       try {
-        const json = JSON.parse(line.slice(6));
-        const delta = json.choices?.[0]?.delta;
+        const json = JSON.parse(line.slice(line.indexOf(":") + 1));
+        const choice = json.choices?.[0];
+        const delta = choice?.delta;
         if (delta) {
           if (delta.reasoning_content) {
             fullReasoning += delta.reasoning_content;
@@ -62,6 +63,9 @@ export async function handleOpenAIStream(
             }
           }
         }
+        // 部分 OpenAI 兼容代理发完内容后既不发 [DONE] 也不关闭连接，
+        // 靠 finish_reason 主动收尾，避免 reader.read() 永久挂起、spinner 不停。
+        if (choice?.finish_reason) break;
       } catch {}
     }
   }

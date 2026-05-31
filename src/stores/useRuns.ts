@@ -50,6 +50,16 @@ interface RunsState {
   ): Promise<string | null>;
   appendLog(taskId: string, line: Omit<LogLine, "id">): void;
   finishRun(taskId: string, exitCode: number | null, signal: string | null): void;
+
+  /**
+   * 开启一段 AI 智能启动会话：本地建一个 kind:"ai" 的 run（不 spawn），占用该脚本当前 run 位。
+   * 返回 aiTaskId —— 后续 AI 叙述（aiLog）与真实启动日志都进这个 run；start_service 复用此 id 调 startTask。
+   */
+  beginAiSession(scriptId: string): string;
+  /** 向 AI 会话 run 追加一行小白话叙述（stream:"ai"） */
+  aiLog(aiTaskId: string, text: string): void;
+  /** 收尾 AI 会话（仅在没有真正 start_service 启动服务、需手动结束时调） */
+  endAiSession(aiTaskId: string, ok: boolean): void;
   /** 手动回填检测到的端口（AI 兜底识别后调用） */
   setDetectedPort(taskId: string, port: number): void;
   stopRun(taskId: string): Promise<void>;
@@ -135,12 +145,46 @@ export const useRuns = create<RunsState>((set, get) => ({
     if (run.lines.length > 10000) {
       run.lines = run.lines.slice(-8000);
     }
-    // 正则优先：首次从日志里识别到端口就记下，后续不再覆盖
-    if (run.detectedPort == null && line.stream !== "system") {
+    // 正则优先：首次从日志里识别到端口就记下，后续不再覆盖（AI 叙述行不参与端口识别）
+    if (run.detectedPort == null && line.stream !== "system" && line.stream !== "ai") {
       const p = extractPort(line.text);
       if (p != null) run.detectedPort = p;
     }
     scheduleFlush();
+  },
+
+  beginAiSession(scriptId) {
+    const aiTaskId = crypto.randomUUID();
+    const runState: RunState = {
+      taskId: aiTaskId,
+      scriptId,
+      status: "running",
+      startedAt: Date.now(),
+      lines: [],
+      kind: "ai",
+    };
+    set((state) => ({
+      runs: { ...state.runs, [aiTaskId]: runState },
+      taskIdByScript: { ...state.taskIdByScript, [scriptId]: aiTaskId },
+    }));
+    return aiTaskId;
+  },
+
+  aiLog(aiTaskId, text) {
+    get().appendLog(aiTaskId, { ts: Date.now(), stream: "ai", text });
+  },
+
+  endAiSession(aiTaskId, ok) {
+    set((state) => {
+      const run = state.runs[aiTaskId];
+      if (!run || run.status !== "running") return state;
+      return {
+        runs: {
+          ...state.runs,
+          [aiTaskId]: { ...run, status: ok ? "success" : "failed", endedAt: Date.now(), exitCode: ok ? 0 : 1 },
+        },
+      };
+    });
   },
 
   setDetectedPort(taskId, port) {

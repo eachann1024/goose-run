@@ -8,6 +8,8 @@ export interface AISettings {
   baseURL: string;
   apiKey: string;
   model: string;
+  /** 轻量模型：日志诊断/分类等高频小任务用；留空回退主模型 */
+  lightModel: string;
   modelOptions: AIModelOption[];
 }
 

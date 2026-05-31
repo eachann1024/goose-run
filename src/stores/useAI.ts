@@ -6,8 +6,11 @@ interface AIState extends AISettings {
   setBaseURL(url: string): void;
   setApiKey(key: string): void;
   setModel(model: string): void;
+  setLightModel(model: string): void;
   setModelOptions(options: AIModelOption[]): void;
   getSettings(): AISettings;
+  /** 取轻量档 settings：lightModel 为空时回退主模型 */
+  getLightSettings(): AISettings;
 }
 
 const STORAGE_KEY = "goose-run:ai";
@@ -28,6 +31,7 @@ function persist(state: AISettings): void {
     baseURL: state.baseURL,
     apiKey: state.apiKey,
     model: state.model,
+    lightModel: state.lightModel,
     modelOptions: state.modelOptions,
   }));
 }
@@ -39,6 +43,7 @@ export const useAI = create<AIState>((set, get) => ({
   baseURL: saved.baseURL ?? "",
   apiKey: saved.apiKey ?? "",
   model: saved.model ?? "",
+  lightModel: saved.lightModel ?? "",
   modelOptions: saved.modelOptions ?? [],
 
   setEnabled(enabled) {
@@ -61,6 +66,11 @@ export const useAI = create<AIState>((set, get) => ({
     persist(get());
   },
 
+  setLightModel(model) {
+    set({ lightModel: model });
+    persist(get());
+  },
+
   setModelOptions(options) {
     set({ modelOptions: options });
     persist(get());
@@ -73,6 +83,20 @@ export const useAI = create<AIState>((set, get) => ({
       baseURL: s.baseURL,
       apiKey: s.apiKey,
       model: s.model,
+      lightModel: s.lightModel,
+      modelOptions: s.modelOptions,
+    };
+  },
+
+  getLightSettings() {
+    const s = get();
+    return {
+      enabled: s.enabled,
+      baseURL: s.baseURL,
+      apiKey: s.apiKey,
+      // 轻量档：lightModel 为空时回退主模型
+      model: s.lightModel.trim() || s.model,
+      lightModel: s.lightModel,
       modelOptions: s.modelOptions,
     };
   },

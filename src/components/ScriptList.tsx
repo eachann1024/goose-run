@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useScripts, sortScripts } from "@/stores/useScripts";
 import type { SortMode } from "@/stores/useScripts";
 import { useRuns } from "@/stores/useRuns";
+import { useAI } from "@/stores/useAI";
+import { useAiLaunch } from "@/hooks/use-ai-launch";
 import { filterScripts } from "@/lib/search";
 import { ScriptCard } from "./ScriptCard";
 
@@ -18,6 +20,13 @@ export function ScriptList() {
   const stopRun = useRuns((s) => s.stopRun);
   const getRunByScript = useRuns((s) => s.getRunByScript);
   const probeScript = useRuns((s) => s.probeScript);
+
+  // AI 智能启动（列表内按住运行按钮触发）：复用详情页同款编排
+  const aiEnabled = useAI((s) => s.enabled);
+  const aiApiKey = useAI((s) => s.apiKey);
+  const aiModel = useAI((s) => s.model);
+  const aiAvailable = aiEnabled && aiApiKey.trim() !== "" && aiModel.trim() !== "";
+  const { launch: aiLaunch } = useAiLaunch();
 
   // 进入面板时对所有带探测命令的脚本探测一次（趋近零成本，非常驻轮询）；插件再次进入也复探
   useEffect(() => {
@@ -86,7 +95,9 @@ export function ScriptList() {
             isCursor={cursorId === s.id}
             index={index}
             onSelect={() => setSelectedId(s.id)}
-            onRun={() => requestRun(s)}
+            onRun={() => { setSelectedId(s.id); requestRun(s); }}
+            aiAvailable={aiAvailable}
+            onAiLaunch={() => { setSelectedId(s.id); aiLaunch(s); }}
             onStop={() => {
               if (run?.taskId) {
                 stopRun(run.taskId);

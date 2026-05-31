@@ -92,11 +92,6 @@ const SYSTEM_PROMPT = `你是一个脚本分析助手。用户会直接给你脚
 只返回 JSON，不要其他内容。如果脚本内容不是有效的 shell 脚本，也尽量提取可执行部分。`;
 
 export function AiAnalysisPanel({ open, onOpenChange, filePath, fileContent }: AiAnalysisPanelProps) {
-  const aiEnabled = useAI((s) => s.enabled);
-  const aiBaseURL = useAI((s) => s.baseURL);
-  const aiApiKey = useAI((s) => s.apiKey);
-  const aiModel = useAI((s) => s.model);
-  const aiModelOptions = useAI((s) => s.modelOptions);
   const addScript = useScripts((s) => s.addScript);
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -120,17 +115,9 @@ export function AiAnalysisPanel({ open, onOpenChange, filePath, fileContent }: A
 
     const fileName = filePath.split("/").pop() || "未知文件";
 
-    const settings = {
-      enabled: aiEnabled,
-      baseURL: aiBaseURL,
-      apiKey: aiApiKey,
-      model: aiModel,
-      modelOptions: aiModelOptions,
-    };
-
     try {
       const result = await runAIStream(
-        settings,
+        useAI.getState().getSettings(),
         [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -161,7 +148,7 @@ export function AiAnalysisPanel({ open, onOpenChange, filePath, fileContent }: A
     } finally {
       abortRef.current = null;
     }
-  }, [aiEnabled, aiBaseURL, aiApiKey, aiModel, aiModelOptions, filePath, fileContent]);
+  }, [filePath, fileContent]);
 
   useEffect(() => {
     if (open && fileContent && phase === "idle") {

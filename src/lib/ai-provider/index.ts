@@ -67,8 +67,11 @@ export async function runAIStream(
     abortSignal?: AbortSignal;
     tools?: AITool[];
     executeTool?: (call: AIToolCall) => string | Promise<string>;
+    /** 工具调用最大轮数；默认 6（普通诊断够用），完整启动链路可传更大值 */
+    maxToolRounds?: number;
   } = {},
 ) {
+  const maxToolRounds = options.maxToolRounds ?? MAX_TOOL_ROUNDS;
   const availability = getAIAvailability(settings);
   if (!availability.ok) throw new Error(availability.reason);
 
@@ -106,7 +109,7 @@ export async function runAIStream(
       const result = await handleOpenAIStream(settings, working, signal, emit, options.tools);
 
       // 模型请求调用工具 —— 本地执行后把结果回传，继续下一轮
-      if (result.toolCalls.length && options.executeTool && round < MAX_TOOL_ROUNDS) {
+      if (result.toolCalls.length && options.executeTool && round < maxToolRounds) {
         working.push({ role: "assistant", content: result.text || "", tool_calls: result.toolCalls });
         for (const call of result.toolCalls) {
           let output: string;

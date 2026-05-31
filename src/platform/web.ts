@@ -140,6 +140,20 @@ export function createWebAdapter(): PlatformAdapter {
       return null;
     },
 
+    // web 降级：浏览器无法执行真实命令，返回提示性结果（AI 会据此叙述，UI 流程可验）
+    async execCommand({ command }) {
+      return {
+        exitCode: null,
+        stdout: "",
+        stderr: `[web 降级] 浏览器无法执行命令：${(command ?? "").slice(0, 80)}（真实启动请在 uTools 内）`,
+        timedOut: false,
+      };
+    },
+    // web 降级：浏览器无法写真实文件
+    async writeFileText() {
+      return { ok: false, error: "[web 降级] 浏览器无法写文件（真实启动请在 uTools 内）" };
+    },
+
     openExternal(url: string) {
       window.open(url, "_blank", "noopener,noreferrer");
     },

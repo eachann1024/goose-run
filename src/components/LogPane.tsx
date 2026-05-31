@@ -3,10 +3,12 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRuns } from "@/stores/useRuns";
 import { cn } from "@/lib/utils";
 import type { LogLine, RunState } from "@/lib/types";
-import { Check, X, Square } from "lucide-react";
+import { Check, X, Square, Sparkles } from "lucide-react";
 
 function classify(line: LogLine): string {
   const t = line.text;
+  // AI 启动管家叙述：紫色（与长按充能同一身份色），区别于 system 蓝、stdout 灰
+  if (line.stream === "ai") return "text-ai-bright";
   if (line.stream === "system") return "text-[#85b8e0] italic";
   if (line.stream === "stderr") return "text-[#f08080]";
   if (/^[─━]{3,}/.test(t)) return "text-[#706963]";
@@ -38,7 +40,7 @@ function StatusBadge({ run, elapsed }: StatusBadgeProps) {
   if (run.status === "running") {
     return (
       <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] bg-blue-900/60 text-blue-300">
-        运行中 · {elapsed.toFixed(1)}s
+        {run.kind === "ai" ? "AI 启动中" : "运行中"} · {elapsed.toFixed(1)}s
       </span>
     );
   }
@@ -76,9 +78,13 @@ function StatusBadge({ run, elapsed }: StatusBadgeProps) {
 
 interface LogPaneProps {
   scriptId: string;
+  /** 日志可交给 AI 诊断时显示入口（通常：运行失败 + AI 可用） */
+  canExplain?: boolean;
+  /** 点击「AI 诊断」：切到 AI tab 并触发诊断 */
+  onExplain?: () => void;
 }
 
-export function LogPane({ scriptId }: LogPaneProps) {
+export function LogPane({ scriptId, canExplain, onExplain }: LogPaneProps) {
   const run = useRuns((s) => s.getRunByScript(scriptId));
   const clearRun = useRuns((s) => s.clearRun);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,6 +143,16 @@ export function LogPane({ scriptId }: LogPaneProps) {
       <div className="flex items-center justify-between">
         <StatusBadge run={run ?? undefined} elapsed={elapsed} />
         <div className="flex gap-1.5">
+          {canExplain && (
+            <button
+              type="button"
+              onClick={onExplain}
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-accent bg-accent-subtle hover:bg-accent/15 transition-colors"
+              title="让 AI 诊断这次失败并给出修复命令"
+            >
+              <Sparkles size={12} strokeWidth={1.75} /> AI 诊断
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCopy}

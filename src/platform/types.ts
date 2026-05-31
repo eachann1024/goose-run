@@ -1,5 +1,6 @@
 import type {
   ScriptData,
+  ShellKind,
   PluginEnterDetail,
 } from "@/lib/types";
 
@@ -44,6 +45,25 @@ export interface PlatformAdapter {
   pickDirectory?(): string | null | Promise<string | null>;
   /** 读取指定路径文件文本内容（uTools files-feature 用），失败返回 null */
   readFileText?(path: string): string | null | Promise<string | null>;
+  /**
+   * 一次性执行命令并抓取 stdout/stderr（AI 智能启动诊断/修复用）。
+   * 带超时（默认 15s，超时 kill 并置 timedOut）与输出截断，避免卡死/撑爆。
+   * 与 startTask 不同：startTask 是长驻流式服务，这里是跑完即回的一次性命令。
+   */
+  execCommand?(opts: {
+    command: string;
+    cwd?: string;
+    shell?: ShellKind;
+    timeoutMs?: number;
+  }): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }>;
+  /**
+   * 写入文件文本（AI 智能启动修配置用）。
+   * 写前对原文件做一次性 .bak 备份（已存在 .bak 则不覆盖），便于回滚。
+   */
+  writeFileText?(
+    path: string,
+    content: string,
+  ): Promise<{ ok: boolean; backupPath?: string; error?: string }>;
   /** clickFeatureCode：点击通知后唤起的 feature code（如 "run"） */
   showNotification(text: string, clickFeatureCode?: string): void;
   /** 在系统默认浏览器打开 URL（如 http://localhost:端口） */

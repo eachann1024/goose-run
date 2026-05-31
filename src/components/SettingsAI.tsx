@@ -22,6 +22,8 @@ export function SettingsAI({ portalContainer }: { portalContainer?: HTMLElement 
   const setApiKey = useAI((s) => s.setApiKey);
   const model = useAI((s) => s.model);
   const setModel = useAI((s) => s.setModel);
+  const lightModel = useAI((s) => s.lightModel);
+  const setLightModel = useAI((s) => s.setLightModel);
   const modelOptions = useAI((s) => s.modelOptions);
   const setModelOptions = useAI((s) => s.setModelOptions);
 
@@ -118,6 +120,29 @@ export function SettingsAI({ portalContainer }: { portalContainer?: HTMLElement 
                 <RefreshCw size={15} strokeWidth={1.75} className={fetching ? "animate-spin" : ""} />
               </Button>
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">轻量模型</label>
+            <Select
+              value={lightModel}
+              onValueChange={(v) => { if (v) setLightModel(v); }}
+              disabled={modelOptions.length === 0}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={modelOptions.length === 0 ? "先获取模型列表" : "留空＝复用主模型"} />
+              </SelectTrigger>
+              <SelectContent container={portalContainer}>
+                {modelOptions.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-fg-faint">
+              日志诊断、命令分类等高频小任务用更便宜的模型；留空则复用上方主模型。
+            </p>
           </div>
 
           {error && (

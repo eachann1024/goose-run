@@ -20,6 +20,10 @@
   --color-copied: #187c49;
   --color-copied-subtle: #e1f7e7;
   --color-input: #fcfaf7;
+  /* AI 紫：长按蓄力充能 / 启动管家叙述行的统一身份色 */
+  --color-ai: #7c52e0;
+  --color-ai-bright: #c8a2f0;
+  --color-ai-subtle: #f1eaff;
   --radius-cell: 14px;
 
   /* 中英文统一楷体，参考 Claude 站点气质，避免中英文字体笔触割裂 */
@@ -52,6 +56,9 @@
     --color-copied: #187c49;
     --color-copied-subtle: #e1f7e7;
     --color-input: #fcfaf7;
+    --color-ai: #7c52e0;
+    --color-ai-bright: #c8a2f0;
+    --color-ai-subtle: #f1eaff;
   }
 
   .dark {
@@ -70,6 +77,9 @@
     --color-copied: #249057;
     --color-copied-subtle: #152e1c;
     --color-input: #2f2824;
+    --color-ai: #a78bfa;
+    --color-ai-bright: #d9bdf6;
+    --color-ai-subtle: #2a1f3d;
   }
 
   @supports (color: oklch(0 0 0)) {
@@ -89,6 +99,9 @@
       --color-copied: oklch(0.52 0.12 155);
       --color-copied-subtle: oklch(0.955 0.03 155);
       --color-input: oklch(0.985 0.004 75);
+      --color-ai: oklch(0.55 0.20 295);
+      --color-ai-bright: oklch(0.78 0.13 300);
+      --color-ai-subtle: oklch(0.96 0.025 300);
     }
 
     .dark {
@@ -107,6 +120,9 @@
       --color-copied: oklch(0.58 0.13 155);
       --color-copied-subtle: oklch(0.28 0.04 155);
       --color-input: oklch(0.26 0.01 55);
+      --color-ai: oklch(0.72 0.16 295);
+      --color-ai-bright: oklch(0.84 0.10 300);
+      --color-ai-subtle: oklch(0.34 0.06 300);
     }
   }
 

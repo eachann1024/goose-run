@@ -244,6 +244,83 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       }
     },
 
+    // AI 智能启动：一次性跑命令并抓 stdout/stderr。带超时 + 输出截断，跑完即回。
+    execCommand: ({ command, cwd, shell, timeoutMs } = {}) => {
+      const MAX_OUT = 8000; // 单流输出上限，超出截断尾部（保留最新）
+      return new Promise((resolve) => {
+        if (typeof command !== "string" || !command.trim()) {
+          resolve({ exitCode: null, stdout: "", stderr: "命令为空", timedOut: false });
+          return;
+        }
+        const sh = shell === "zsh" ? "zsh" : shell === "sh" ? "sh" : "bash";
+        const limit = Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15000;
+        let out = "";
+        let err = "";
+        let settled = false;
+        let timedOut = false;
+        let child;
+        const clip = (s) => (s.length > MAX_OUT ? "…（已截断）\n" + s.slice(-MAX_OUT) : s);
+        const finish = (exitCode) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve({ exitCode, stdout: clip(out), stderr: clip(err), timedOut });
+        };
+        const timer = setTimeout(() => {
+          timedOut = true;
+          try {
+            if (child && child.pid) process.kill(-child.pid, "SIGKILL");
+          } catch {
+            try { child && child.kill("SIGKILL"); } catch {}
+          }
+          finish(null);
+        }, limit);
+        try {
+          child = spawn(sh, ["-lc", command], {
+            cwd: cwd && cwd.trim() ? cwd : process.env.HOME,
+            env: process.env,
+            detached: true,
+          });
+          child.stdout.on("data", (d) => { out += d.toString(); });
+          child.stderr.on("data", (d) => { err += d.toString(); });
+          child.on("error", (e) => {
+            err += String((e && e.message) || e);
+            finish(null);
+          });
+          child.on("exit", (code) => finish(code));
+        } catch (e) {
+          err += String((e && e.message) || e);
+          finish(null);
+        }
+      });
+    },
+
+    // AI 智能启动：写文件修配置。写前对原文件做一次性 .bak 备份（已存在则不覆盖），便于回滚。
+    writeFileText: (path, content) => {
+      return new Promise((resolve) => {
+        try {
+          const fs = require("fs");
+          if (typeof path !== "string" || !path.trim()) {
+            resolve({ ok: false, error: "路径为空" });
+            return;
+          }
+          let backupPath;
+          if (fs.existsSync(path)) {
+            const bak = path + ".bak";
+            if (!fs.existsSync(bak)) {
+              fs.copyFileSync(path, bak);
+              backupPath = bak;
+            }
+          }
+          fs.writeFileSync(path, String(content ?? ""), "utf-8");
+          resolve({ ok: true, backupPath });
+        } catch (err) {
+          console.error("[goose-run] writeFileText failed:", err);
+          resolve({ ok: false, error: String((err && err.message) || err) });
+        }
+      });
+    },
+
     // 结束占用端口的进程：按 LISTEN 端口定位 pid 并 SIGTERM。
     // 用于「停止/重启」外部启动的服务（无任务句柄，只能按端口杀）。端口本就空闲也算成功。
     killPort: (port) => {

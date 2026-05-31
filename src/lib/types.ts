@@ -53,7 +53,8 @@ export interface LogLine {
   /** 单调自增 id，作为虚拟列表稳定 key（slice 截断后下标会平移，不能用 index） */
   id: number;
   ts: number;
-  stream: "stdout" | "stderr" | "system";
+  /** ai = AI 智能启动管家的小白话叙述行 */
+  stream: "stdout" | "stderr" | "system" | "ai";
   text: string;
 }
 
@@ -68,6 +69,8 @@ export interface RunState {
   lines: LogLine[];
   /** 运行后从日志里自动识别出的监听端口（正则优先，AI 兜底回填） */
   detectedPort?: number;
+  /** ai = AI 智能启动会话（叙述+真实启动日志合流）；缺省/script = 普通脚本运行 */
+  kind?: "script" | "ai";
 }
 
 export interface TaskLogEvent { taskId: string; stream: "stdout" | "stderr"; text: string; }

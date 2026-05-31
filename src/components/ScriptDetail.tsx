@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useScripts } from "@/stores/useScripts";
 import { useRuns } from "@/stores/useRuns";
 import { useAI } from "@/stores/useAI";
 import { usePlatform } from "@/platform/context";
 import { runAIStream } from "@/lib/ai-provider";
+import { useAiLaunch } from "@/hooks/use-ai-launch";
+import { useLongPress } from "@/hooks/use-long-press";
 import { lsofProbe } from "@/lib/port-detect";
 import type { ScriptData } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogPane } from "@/components/LogPane";
-import { X, Play, Square, RotateCw, Pencil, Trash2, Globe, Sparkles, Loader2, Check } from "lucide-react";
+import { AiTab } from "@/components/AiTab";
+import { ChargeFill, chargeGlow } from "@/components/ChargeFill";
+import { X, Play, Square, RotateCw, Pencil, Trash2, Globe, Sparkles, Loader2, Check, ChevronRight } from "lucide-react";
 
 interface ScriptDetailProps {
   script: ScriptData;
@@ -38,6 +43,11 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
   // 外部进程停止/重启进行中（按钮转圈、防重复点）
   const [externalBusy, setExternalBusy] = useState<null | "stop" | "restart">(null);
 
+  // Tab 工作台：概览 / 日志 / AI
+  const [activeTab, setActiveTab] = useState<"overview" | "log" | "ai">("overview");
+  // 日志区「AI 诊断」触发信号：自增一次 → AiTab 自动诊断一次
+  const [explainNonce, setExplainNonce] = useState(0);
+
   const pluginRunning = run?.status === "running";
   // 探测命令判定在运行，但本插件没有对应进程 → 是外部（终端等）启动的
   const externalRunning = probedRunning && !pluginRunning;
@@ -45,11 +55,22 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
   const port = script.port ?? run?.detectedPort ?? null;
   // AI 兜底前提：AI 可用、当前无端口、且已有日志可分析
   const canAiDetect = aiAvailable && port == null && (run?.lines.length ?? 0) > 0;
+  // 日志可诊断：运行失败 + AI 可用
+  const canExplain = aiAvailable && run?.status === "failed";
 
   // 端口变化或换脚本时清掉上次复核结果
   useEffect(() => {
     setPortConfirmed(null);
   }, [script.id, port]);
+
+  // 运行态上升沿：脚本一旦开始运行（无论从列表、键盘还是本面板触发），自动切到日志 tab 看输出
+  const prevRunningRef = useRef(false);
+  useEffect(() => {
+    if (pluginRunning && !prevRunningRef.current) {
+      setActiveTab("log");
+    }
+    prevRunningRef.current = pluginRunning;
+  }, [pluginRunning]);
 
   // 选中渲染期间探测真实运行状态，并每 3s 轮询刷新（仅在有探测命令时）
   useEffect(() => {
@@ -61,13 +82,36 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
     return () => clearInterval(timer);
   }, [script.id, script.probeCommand, probeScript]);
 
+  // AI 智能启动：按住运行按钮 1.5s 触发；切到日志看 AI 一步步排障启动
+  const { launch: aiLaunch, abort: aiAbort } = useAiLaunch();
+
   function handleRun() {
     if (pluginRunning) {
+      // 中止：同时取消可能在跑的 AI 启动循环（无则无害）再停掉真实进程
+      aiAbort();
       stopRun(run!.taskId);
     } else {
       // 统一入口：危险确认 + 参数填值 + 登录 shell 都在 requestRun 内处理
       requestRun(script);
+      // 跑起来就想看输出 → 自动切到日志 Tab（无参数脚本即时生效）
+      setActiveTab("log");
     }
+  }
+
+  function handleAiLaunch() {
+    if (!aiAvailable || pluginRunning) return;
+    setActiveTab("log");
+    aiLaunch(script);
+  }
+  const longPress = useLongPress({
+    onLongPress: handleAiLaunch,
+    enabled: aiAvailable && !pluginRunning,
+  });
+
+  // 日志区点「AI 诊断」：切到 AI tab 并触发一次诊断
+  function handleExplain() {
+    setActiveTab("ai");
+    setExplainNonce((n) => n + 1);
   }
 
   // 外部进程没有任务句柄，只能按 LISTEN 端口杀；杀完立即复核真实状态，不等 3s 轮询
@@ -96,6 +140,7 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
       await killExternal();
       // 端口让出后按本插件命令重新拉起，之后走统一入口（危险确认/参数/登录 shell）
       requestRun(script);
+      setActiveTab("log");
     } finally {
       setExternalBusy(null);
     }
@@ -142,7 +187,7 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
     }
     setPortDetecting(true);
     try {
-      const result = await runAIStream(useAI.getState().getSettings(), [
+      const result = await runAIStream(useAI.getState().getLightSettings(), [
         {
           role: "system",
           content:
@@ -163,6 +208,17 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
       setPortDetecting(false);
     }
   }
+
+  // 最近运行摘要文本
+  const runSummary = (() => {
+    if (!run) return null;
+    const dur = run.endedAt != null ? ((run.endedAt - run.startedAt) / 1000).toFixed(1) + "s" : null;
+    if (run.status === "running") return { label: "运行中", tone: "text-blue-500" };
+    if (run.status === "success") return { label: `成功 · exit 0${dur ? ` · ${dur}` : ""}`, tone: "text-green-500" };
+    if (run.status === "failed") return { label: `失败 · exit ${run.exitCode ?? "?"}${dur ? ` · ${dur}` : ""}`, tone: "text-destructive" };
+    if (run.status === "stopped") return { label: `已中止${dur ? ` · ${dur}` : ""}`, tone: "text-yellow-500" };
+    return null;
+  })();
 
   return (
     <div className="flex h-full flex-col">
@@ -186,9 +242,34 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
         </button>
       </div>
 
-      {/* 主体：元信息 → 命令 → 操作 → 日志铺满 */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
-          {/* 元信息卡 */}
+      {/* Tab 工作台（手写 tab，互斥显隐 + 全部保活） */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 gap-4 border-b border-border px-5">
+          {([
+            { k: "overview", label: "概览" },
+            { k: "log", label: "日志" },
+            { k: "ai", label: "AI" },
+          ] as const).map((t) => (
+            <button
+              key={t.k}
+              type="button"
+              onClick={() => setActiveTab(t.k)}
+              className={cn(
+                "relative flex h-9 items-center gap-1 text-sm font-medium transition-colors",
+                activeTab === t.k ? "text-fg" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              {t.k === "ai" && <Sparkles size={13} strokeWidth={1.75} />}
+              {t.label}
+              {t.k === "ai" && canExplain && <span className="ml-0.5 size-1.5 rounded-full bg-accent" />}
+              {activeTab === t.k && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-accent" />}
+            </button>
+          ))}
+        </div>
+
+        {/* 概览 */}
+        <div className={activeTab === "overview" ? "min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4" : "hidden"}>
+          {/* 元信息 */}
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {script.cwd && (
               <span className="flex min-w-0 max-w-full items-center gap-1">
@@ -198,10 +279,7 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
                 </code>
               </span>
             )}
-            {script.shell && (
-              <Badge variant="outline">{script.shell}</Badge>
-            )}
-            {/* 端口徽标：点击在浏览器打开 localhost:端口 */}
+            {script.shell && <Badge variant="outline">{script.shell}</Badge>}
             {port != null && (
               <button
                 type="button"
@@ -216,7 +294,6 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
                 )}
               </button>
             )}
-            {/* lsof 复核：确认该端口此刻是否真在监听 */}
             {port != null && (
               <button
                 type="button"
@@ -233,7 +310,6 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
                 )}
               </button>
             )}
-            {/* AI 兜底：无端口但有日志时，手动触发 AI 识别 */}
             {canAiDetect && (
               <button
                 type="button"
@@ -250,24 +326,21 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
               </button>
             )}
             {script.tags?.map((tag) => (
-              <Badge key={tag} variant="secondary">
-                {tag}
-              </Badge>
+              <Badge key={tag} variant="secondary">{tag}</Badge>
             ))}
           </div>
 
           {/* 命令体 */}
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-muted-foreground">命令</p>
-            <pre className="bg-muted/60 rounded-md p-3 font-mono text-xs whitespace-pre-wrap max-h-32 overflow-y-auto">
+            <pre className="bg-muted/60 rounded-md p-3 font-mono text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
               {script.script}
             </pre>
           </div>
 
-          {/* 操作行：主控区靠左、编辑/删除靠右分组 */}
-          <div className="flex items-center gap-2">
+          {/* 操作行 */}
+          <div className="flex items-start gap-2">
             {externalRunning ? (
-              // 外部启动：保留标识 + 停止（左）/ 重启（右）。无端口则无法定位进程，置灰。
               <div className="flex items-center gap-2">
                 <span
                   className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-subtle px-2 py-1 text-xs font-medium text-accent"
@@ -311,18 +384,56 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
                 </Button>
               </div>
             ) : (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleRun}
-                className="min-w-[80px] gap-1.5"
-              >
-                {pluginRunning ? (
-                  <><Square size={14} strokeWidth={1.75} /> 中止</>
-                ) : (
-                  <><Play size={14} strokeWidth={1.75} /> 运行</>
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleRun}
+                  {...(pluginRunning ? {} : longPress.handlers)}
+                  style={chargeGlow(longPress.charging, longPress.progress)}
+                  className="relative min-w-[80px] gap-1.5 select-none overflow-hidden"
+                  title={pluginRunning ? "中止运行" : aiAvailable ? "点击运行 · 按住 1.5s 让 AI 智能启动" : "点击运行"}
+                >
+                  {/* 蓄力充能：按住时紫色（AI 身份色）从左铺满，隐喻 AI 接管启动 */}
+                  <ChargeFill charging={longPress.charging} progress={longPress.progress} />
+                  <span className="relative z-10 inline-flex items-center gap-1.5">
+                    {pluginRunning ? (
+                      run?.kind === "ai" ? (
+                        <><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> AI 启动中</>
+                      ) : (
+                        <><Square size={14} strokeWidth={1.75} /> 中止</>
+                      )
+                    ) : (
+                      <><Play size={14} strokeWidth={1.75} /> 运行</>
+                    )}
+                  </span>
+                </Button>
+
+                {/* 藏在运行按钮下方的一截 AI 图标条：默认低调，按住时显现充能 */}
+                {!pluginRunning && (
+                  aiAvailable ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 text-[10px] leading-none transition-colors",
+                        longPress.charging ? "text-ai" : "text-fg-faint",
+                      )}
+                    >
+                      <Sparkles
+                        size={10}
+                        strokeWidth={1.75}
+                        className={longPress.charging ? "animate-pulse" : ""}
+                      />
+                      {longPress.charging
+                        ? `蓄力 ${Math.round(longPress.progress * 100)}% · 松开取消`
+                        : "按住 1.5s · AI 帮你智能启动"}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] leading-none text-fg-faint">
+                      <Sparkles size={10} strokeWidth={1.75} /> 开启 AI+ 解锁智能启动
+                    </span>
+                  )
                 )}
-              </Button>
+              </div>
             )}
 
             <div className="ml-auto flex items-center gap-2">
@@ -340,8 +451,33 @@ export function ScriptDetail({ script }: ScriptDetailProps) {
             </div>
           </div>
 
-          {/* 日志面板 */}
-          <LogPane scriptId={script.id} />
+          {/* 最近运行摘要 → 点击切到日志 */}
+          {runSummary && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("log")}
+              className="flex w-full items-center justify-between rounded-md border border-border bg-surface/50 px-3 py-2 text-xs transition-colors hover:bg-surface"
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="text-fg-muted">最近运行</span>
+                <span className={runSummary.tone}>{runSummary.label}</span>
+              </span>
+              <span className="flex items-center gap-0.5 text-fg-faint">
+                查看日志 <ChevronRight size={13} strokeWidth={1.75} />
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* 日志（保活：display 隐藏不卸载，保留虚拟列表与计时） */}
+        <div className={activeTab === "log" ? "flex min-h-0 flex-1 flex-col px-5 py-4" : "hidden"}>
+          <LogPane scriptId={script.id} canExplain={canExplain} onExplain={handleExplain} />
+        </div>
+
+        {/* AI 诊断（保活：保留诊断结果） */}
+        <div className={activeTab === "ai" ? "min-h-0 flex-1 px-5 py-4" : "hidden"}>
+          <AiTab script={script} run={run} triggerNonce={explainNonce} />
+        </div>
       </div>
     </div>
   );

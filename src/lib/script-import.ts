@@ -24,6 +24,63 @@ const EXT_INTERPRETER: Record<string, string> = {
 
 const SHELL_EXT = new Set(["sh", "bash", "zsh"]);
 
+// 明确的二进制 / 非脚本扩展名：拖入时直接拒绝
+const BINARY_EXT = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg", "tiff",
+  "pdf", "zip", "gz", "tar", "rar", "7z", "dmg", "pkg", "exe", "app",
+  "mp4", "mov", "avi", "mkv", "mp3", "wav", "flac", "ogg",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+  "woff", "woff2", "ttf", "otf", "eot", "wasm", "so", "dylib", "bin",
+]);
+
+// 可读但通常不是脚本的文本扩展名：拖入时给「仍导入」逃生口
+const AMBIGUOUS_TEXT_EXT = new Set([
+  "txt", "md", "markdown", "json", "yaml", "yml", "toml", "ini", "csv",
+  "log", "html", "htm", "xml", "css", "lock",
+]);
+
+export type DropKind = "script" | "binary" | "ambiguous";
+
+/**
+ * 判定拖入文件应如何处理：
+ * - script：已知可运行脚本（解释型扩展 / shell 扩展 / 有 shebang / 无扩展的纯文本片段）
+ * - binary：明确的二进制或非脚本类型，应直接拒绝
+ * - ambiguous：可读但通常不是脚本（.txt/.md/.json…）或内容含大量不可打印字符，给逃生口
+ */
+export function classifyDroppedFile(filePath: string, content: string): DropKind {
+  const name = filePath.split(/[\\/]/).pop() || filePath;
+  const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+  const firstLine = (content.split("\n", 1)[0] || "").trim();
+
+  // 内容含大量不可打印字符 → 当二进制（即便扩展名缺失或伪装）
+  if (looksBinary(content)) return "binary";
+  if (ext && BINARY_EXT.has(ext)) return "binary";
+
+  // 已知可运行：解释型扩展 / shell 扩展 / shebang
+  if (ext && (EXT_INTERPRETER[ext] || SHELL_EXT.has(ext))) return "script";
+  if (firstLine.startsWith("#!")) return "script";
+
+  // 可读但非脚本类型
+  if (ext && AMBIGUOUS_TEXT_EXT.has(ext)) return "ambiguous";
+
+  // 无扩展或未知扩展的纯文本：按脚本片段处理（保持原有兜底行为）
+  return "script";
+}
+
+// 采样前 1KB，统计不可打印控制字符占比，>10% 视为二进制
+function looksBinary(content: string): boolean {
+  const sample = content.slice(0, 1024);
+  if (sample.length === 0) return false;
+  let ctrl = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const c = sample.charCodeAt(i);
+    if (c === 0) return true; // NUL → 必是二进制
+    // 允许 \t(9) \n(10) \r(13)，其余 <32 的控制字符计入
+    if (c < 32 && c !== 9 && c !== 10 && c !== 13) ctrl++;
+  }
+  return ctrl / sample.length > 0.1;
+}
+
 function quote(p: string): string {
   // 路径含空格/特殊字符时加双引号；本身含双引号的极少见，原样保留
   return /[\s'"&|;()<>$`\\]/.test(p) ? `"${p}"` : p;

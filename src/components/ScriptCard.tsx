@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Play, Square } from "lucide-react";
 import { useRuns } from "@/stores/useRuns";
+import { useLongPress } from "@/hooks/use-long-press";
+import { ChargeFill, chargeGlow } from "@/components/ChargeFill";
 import type { ScriptData } from "@/lib/types";
 
 interface ScriptCardProps {
@@ -10,6 +12,9 @@ interface ScriptCardProps {
   onSelect: () => void;
   onRun: () => void;
   onStop: () => void;
+  /** 按住运行按钮 1.5s 触发 AI 智能启动；aiAvailable 为 false 时退化为纯点击 */
+  onAiLaunch?: () => void;
+  aiAvailable?: boolean;
   index: number;
 }
 
@@ -62,6 +67,8 @@ export function ScriptCard({
   onSelect,
   onRun,
   onStop,
+  onAiLaunch,
+  aiAvailable = false,
   index,
 }: ScriptCardProps) {
   const run = useRuns((s) => s.getRunByScript(script.id));
@@ -69,6 +76,11 @@ export function ScriptCard({
   const cardRef = useRef<HTMLDivElement>(null);
 
   const isRunning = run?.status === "running";
+  // 列表运行按钮：快速点 = 运行；按住 1.5s = AI 智能启动（无提示文字，仅充能特效）
+  const longPress = useLongPress({
+    onLongPress: () => onAiLaunch?.(),
+    enabled: aiAvailable && !isRunning && !externalRunning,
+  });
   // 键盘游标移到本卡时滚入视野
   useEffect(() => {
     if (isCursor) cardRef.current?.scrollIntoView({ block: "nearest" });
@@ -143,11 +155,17 @@ export function ScriptCard({
       ) : (
         <button
           onClick={(e) => { e.stopPropagation(); onRun(); }}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-accent text-accent-fg transition-colors hover:bg-accent-hover active:scale-95"
+          {...longPress.handlers}
+          style={chargeGlow(longPress.charging, longPress.progress)}
+          className="relative flex items-center gap-1 overflow-hidden select-none px-2.5 py-1.5 rounded-md text-xs font-medium bg-accent text-accent-fg transition-colors hover:bg-accent-hover active:scale-95"
           aria-label="运行脚本"
+          title={aiAvailable ? "点击运行 · 按住 1.5s 让 AI 智能启动" : "运行脚本"}
         >
-          <Play size={12} strokeWidth={2} />
-          运行
+          <ChargeFill charging={longPress.charging} progress={longPress.progress} />
+          <span className="relative z-10 inline-flex items-center gap-1">
+            <Play size={12} strokeWidth={2} />
+            运行
+          </span>
         </button>
       )}
     </div>

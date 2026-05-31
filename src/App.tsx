@@ -6,8 +6,10 @@ import { usePlatform } from "@/platform/context";
 import { filterScripts } from "@/lib/search";
 import { extractParams } from "@/lib/params";
 import { getAIAvailability } from "@/lib/ai-provider";
-import { inferRunCommand, dirOf } from "@/lib/script-import";
+import { inferRunCommand, dirOf, classifyDroppedFile } from "@/lib/script-import";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { FileDown, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { ScriptList } from "@/components/ScriptList";
@@ -280,7 +282,7 @@ export default function App() {
       e.preventDefault();
       const idx = parseInt(e.key) - 1;
       const target = getVisibleScripts(useScripts.getState())[idx];
-      if (target) useRuns.getState().requestRun(target);
+      if (target) { setSelectedId(target.id); useRuns.getState().requestRun(target); }
       return;
     }
 
@@ -314,6 +316,7 @@ export default function App() {
       if (!target && st.searchQuery.trim()) target = visible[0] ?? null;
       if (target) {
         e.preventDefault();
+        setSelectedId(target.id);
         useRuns.getState().requestRun(target);
       }
       return;
@@ -378,14 +381,38 @@ export default function App() {
     const content = await file.text();
     const filePath = (file as File & { path?: string }).path || file.name;
 
-    const aiReady = getAIAvailability(useAI.getState().getSettings()).ok;
-    // AI 可用 → 按落点分流（右半=AI 上传，左半=本地）；AI 不可用 → 整块走本地
-    const useAiUpload = aiReady && e.clientX >= window.innerWidth / 2;
+    // 类型分流：二进制直接拒、文本类给逃生口、脚本类正常导入
+    const kind = classifyDroppedFile(filePath, content);
+    if (kind === "binary") {
+      toast.error("不支持的文件类型", {
+        description: `${file.name}：鹅的运行只接受可执行脚本`,
+      });
+      return;
+    }
 
-    if (useAiUpload) {
+    const aiReady = getAIAvailability(useAI.getState().getSettings()).ok;
+    // 用户意图：拖到右半屏想用 AI 解析
+    const wantRight = e.clientX >= window.innerWidth / 2;
+
+    if (kind === "ambiguous") {
+      toast.warning("这看起来不是脚本", {
+        description: `${file.name} 似乎不是可执行脚本，仍要作为命令导入吗？`,
+        action: {
+          label: "仍导入",
+          onClick: () => toLocalUpload(file, content, filePath),
+        },
+      });
+      return;
+    }
+
+    // 脚本类：AI 可用且拖右半 → AI 解析；否则本地解析
+    if (aiReady && wantRight) {
       setDroppedFile({ path: filePath, content });
       setAiPanelOpen(true);
     } else {
+      if (wantRight && !aiReady) {
+        toast.info("AI 未配置，已转为本地解析");
+      }
       toLocalUpload(file, content, filePath);
     }
   }, [toLocalUpload]);
@@ -400,7 +427,7 @@ export default function App() {
   } else if (pendingRun != null) {
     rightContent = <ParamPanel />;
   } else if (selectedScript) {
-    rightContent = <ScriptDetail script={selectedScript} />;
+    rightContent = <ScriptDetail key={selectedScript.id} script={selectedScript} />;
   } else if (scripts.length === 0) {
     rightContent = (
       <div className="flex h-full items-center justify-center overflow-y-auto">
@@ -450,6 +477,8 @@ export default function App() {
         filePath={droppedFile.path}
         fileContent={droppedFile.content}
       />
+
+      <Toaster />
 
       {dragOver && (
         dragAiReady ? (

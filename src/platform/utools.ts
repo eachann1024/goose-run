@@ -18,6 +18,8 @@ declare global {
       readFromFile?(): string | null;
       pickDirectory?(): string | null;
       readFileText?(path: string): string | null;
+      execCommand?(opts: { command: string; cwd?: string; shell?: string; timeoutMs?: number }): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }>;
+      writeFileText?(path: string, content: string): Promise<{ ok: boolean; backupPath?: string; error?: string }>;
       showNotification(text: string, clickFeatureCode?: string): void;
       openExternal?(url: string): void;
       hideWindow?(): void;
@@ -58,6 +60,12 @@ export function createUToolsAdapter(): PlatformAdapter {
     readFromFile() { return api.readFromFile?.() ?? null; },
     pickDirectory() { return api.pickDirectory?.() ?? null; },
     readFileText(path) { return api.readFileText?.(path) ?? null; },
+    async execCommand(opts) {
+      return (await api.execCommand?.(opts)) ?? { exitCode: null, stdout: "", stderr: "当前环境不支持执行命令", timedOut: false };
+    },
+    async writeFileText(path, content) {
+      return (await api.writeFileText?.(path, content)) ?? { ok: false, error: "当前环境不支持写文件" };
+    },
     showNotification(text, clickFeatureCode) { api.showNotification(text, clickFeatureCode); },
     openExternal(url) { api.openExternal?.(url); },
     hideWindow() { api.hideWindow?.(); },
